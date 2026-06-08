@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const SUPABASE_URL = "https://fbldconclzuckyotxvsk.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGRjb25jbHp1Y2t5b3R4dnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MDUwMDcsImV4cCI6MjA5NjQ4MTAwN30.dFPSoQLShrnrhGdAt4K3TPZWLigtUAe4ZaI7XygCMO0";
+const SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL_HERE";
+const SUPABASE_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
 const USE_CLOUD = SUPABASE_URL !== "PASTE_YOUR_SUPABASE_URL_HERE";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
@@ -1084,4 +1084,258 @@ export default function App(){
   const [quests,setQuests]       = useState([]);
   const [members,setMembers]     = useState([]);
   const [filter,setFilter]       = useState("All");
-  const [tab,setTab]             = useState("quests
+  const [tab,setTab]             = useState("quests"); // quests | party | completed | calendar
+  const [questModal,setQuestModal]   = useState(null);
+  const [memberModal,setMemberModal] = useState(null);
+  const [deleteTarget,setDeleteTarget] = useState(null);
+  const [memberDetail,setMemberDetail] = useState(null);
+  const [mounted,setMounted]     = useState(false);
+  const [syncing,setSyncing]     = useState(false);
+
+  useEffect(()=>{
+    setTimeout(()=>setMounted(true),50);
+    if(USE_CLOUD){
+      setSyncing(true);
+      Promise.all([sb.getAll("quests"),sb.getAll("members")]).then(([q,m])=>{
+        setQuests(q||[]);setMembers(m||[]);setSyncing(false);
+      }).catch(()=>{setQuests(local.load("sidequests"));setMembers(local.load("members"));setSyncing(false);});
+    } else {
+      setQuests(local.load("sidequests"));setMembers(local.load("members"));
+    }
+  },[]);
+
+  const saveQuest=async(q)=>{
+    const next=quests.find(x=>x.id===q.id)?quests.map(x=>x.id===q.id?q:x):[q,...quests];
+    setQuests(next);setQuestModal(null);
+    if(USE_CLOUD){try{await sb.upsert("quests",q);}catch{}}else local.save("sidequests",next);
+  };
+  const deleteQuest=async()=>{
+    const next=quests.filter(q=>q.id!==deleteTarget.id);
+    setQuests(next);setDeleteTarget(null);
+    if(USE_CLOUD){try{await sb.delete("quests",deleteTarget.id);}catch{}}else local.save("sidequests",next);
+  };
+  const saveMember=async(m)=>{
+    const next=members.find(x=>x.id===m.id)?members.map(x=>x.id===m.id?m:x):[m,...members];
+    setMembers(next);setMemberModal(null);
+    if(USE_CLOUD){try{await sb.upsert("members",m);}catch{}}else local.save("members",next);
+  };
+  const deleteMember=async()=>{
+    const next=members.filter(m=>m.id!==deleteTarget.id);
+    setMembers(next);setDeleteTarget(null);
+    if(USE_CLOUD){try{await sb.delete("members",deleteTarget.id);}catch{}}else local.save("members",next);
+  };
+
+  const filtered=filter==="All"?quests:quests.filter(q=>q.status===filter);
+  const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:quests.filter(q=>q.status===s).length}),{});
+  const completedCount=quests.filter(q=>q.status==="Completed").length;
+
+  const TABS=[
+    {id:"quests",   label:"Quests",   icon:Icons.shield, count:quests.length},
+    {id:"party",    label:"Party",    icon:Icons.users,  count:members.length},
+    {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
+    {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
+  ];
+
+  return(
+    <div style={{minHeight:"100vh",background:"#08080A",color:"#F0F0F0",
+      fontFamily:"'DM Sans',sans-serif",paddingBottom:100,
+      opacity:mounted?1:0,transition:"opacity 0.4s ease",position:"relative"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::placeholder{color:rgba(255,255,255,0.18)!important;}
+        ::-webkit-scrollbar{width:0;}
+        body{background:#08080A;}
+        @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(1.3);}}
+        @keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        @keyframes orb1{0%,100%{transform:translate(0,0);}50%{transform:translate(40px,-30px);}}
+        @keyframes orb2{0%,100%{transform:translate(0,0);}50%{transform:translate(-30px,40px);}}
+        @keyframes fabPulse{0%,100%{box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 0 rgba(240,240,240,0.08);}50%{box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 10px rgba(240,240,240,0);}}
+      `}</style>
+
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0,overflow:"hidden"}}>
+        <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(168,255,120,0.05) 0%,transparent 70%)",top:-100,left:-100,animation:"orb1 12s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(192,132,252,0.04) 0%,transparent 70%)",bottom:-200,right:-100,animation:"orb2 16s ease-in-out infinite"}}/>
+      </div>
+
+      <header style={{position:"sticky",top:0,zIndex:10,background:"rgba(8,8,10,0.85)",backdropFilter:"blur(24px)",borderBottom:"1px solid rgba(255,255,255,0.05)",padding:"44px 24px 0"}}>
+        <div style={{maxWidth:560,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+            <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.16em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)"}}>Your Life</p>
+            {USE_CLOUD?(
+              <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:syncing?"rgba(255,212,120,0.7)":"rgba(168,255,120,0.6)",fontFamily:"'DM Sans',sans-serif"}}>
+                <Icon d={Icons.cloud} size={11} stroke="currentColor"/>{syncing?"Syncing…":"Synced"}
+              </div>
+            ):(
+              <div style={{fontSize:10,color:"rgba(255,120,120,0.5)",fontFamily:"'DM Sans',sans-serif"}}>⚠ Local only</div>
+            )}
+          </div>
+          <h1 style={{fontSize:30,fontWeight:700,letterSpacing:"-0.03em",marginBottom:18,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2 0%,rgba(242,242,242,0.5) 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Side Quests</h1>
+          <div style={{display:"flex",gap:0,borderBottom:"1px solid rgba(255,255,255,0.06)",overflowX:"auto"}}>
+            {TABS.map(t=>(
+              <button key={t.id} onClick={()=>{setTab(t.id);setMemberDetail(null);}} style={{
+                display:"flex",alignItems:"center",gap:6,flexShrink:0,padding:"10px 14px 12px",
+                background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?"rgba(255,255,255,0.6)":"transparent"}`,
+                color:tab===t.id?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.3)",
+                cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",marginBottom:-1,
+              }}>
+                <Icon d={t.icon} size={13} stroke="currentColor"/>{t.label}
+                {t.count>0&&<span style={{fontSize:10,opacity:0.5,marginLeft:1}}>{t.count}</span>}
+              </button>
+            ))}
+          </div>
+          {tab==="quests"&&(
+            <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:2,paddingTop:14}}>
+              {["All",...STATUSES].map(s=>{
+                const active=filter===s;
+                const count=s==="All"?quests.length:counts[s];
+                const color=s==="All"?"#F0F0F0":STATUS_META[s]?.color;
+                const glow=s!=="All"?STATUS_META[s]?.glow:null;
+                return<button key={s} onClick={()=>setFilter(s)} style={{
+                  flexShrink:0,padding:"5px 13px",borderRadius:20,fontSize:11.5,fontWeight:600,
+                  cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+                  border:`1px solid ${active?color:"rgba(255,255,255,0.09)"}`,
+                  background:active?`${color}15`:"transparent",color:active?color:"rgba(255,255,255,0.3)",
+                  boxShadow:active&&glow?`0 0 14px ${glow}`:"none",transform:active?"scale(1.04)":"scale(1)",
+                  transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",marginBottom:14,
+                }}>{s}{count>0&&<span style={{opacity:0.5,marginLeft:5,fontSize:10}}>{count}</span>}</button>;
+              })}
+            </div>
+          )}
+          {tab!=="quests"&&<div style={{height:14}}/>}
+        </div>
+      </header>
+
+      <main style={{position:"relative",zIndex:1}}>
+        {tab==="quests"&&(
+          <div style={{maxWidth:560,margin:"20px auto 0",padding:"0 24px"}}>
+            <StatsBar quests={quests}/>
+            {syncing?(
+              <div style={{textAlign:"center",padding:"60px 0"}}>
+                <div style={{width:24,height:24,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.5)",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
+                <p style={{fontSize:14,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Loading…</p>
+              </div>
+            ):filtered.length===0?(
+              <div style={{textAlign:"center",padding:"80px 0",animation:"cardIn 0.5s ease both"}}>
+                <div style={{fontSize:48,marginBottom:16,opacity:0.12}}>⚔️</div>
+                <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7}}>{filter==="All"?"No quests yet.\nBegin your journey.":`No ${filter} quests.`}</p>
+              </div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {filtered.map((q,i)=>(
+                  <QuestCard key={q.id} quest={q} members={members} index={i}
+                    onEdit={q=>setQuestModal(q)} onDelete={id=>setDeleteTarget({id,type:"quest"})}/>
+                ))}
+              </div>
+            )}
+            {!USE_CLOUD&&(
+              <div style={{marginTop:24,padding:"14px 16px",borderRadius:14,background:"rgba(255,120,120,0.06)",border:"1px solid rgba(255,120,120,0.15)",fontSize:12,color:"rgba(255,180,180,0.7)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+                ⚠️ <strong>Local only.</strong> Add Supabase credentials to sync across devices.
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==="party"&&!memberDetail&&(
+          <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 0"}}>
+            <div style={{marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Crew</p>
+                <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Party Members</h2>
+              </div>
+              <button onClick={()=>setMemberModal({...EMPTY_MEMBER})} style={{display:"flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+                <Icon d={Icons.plus} size={14}/> Add
+              </button>
+            </div>
+            {members.length===0?(
+              <div style={{textAlign:"center",padding:"60px 0",animation:"cardIn 0.5s ease both"}}>
+                <div style={{fontSize:48,marginBottom:16,opacity:0.15}}>🧙</div>
+                <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7}}>No party members yet.<br/>Add your companions.</p>
+              </div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {members.map((m,i)=>(
+                  <div key={m.id} style={{animation:`cardIn 0.4s ease ${i*0.06}s both`}}>
+                    <MemberCard member={m} quests={quests} onClick={()=>setMemberDetail(m)}
+                      onEdit={()=>setMemberModal(m)} onDelete={id=>setDeleteTarget({id,type:"member"})}/>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==="party"&&memberDetail&&(
+          <MemberDetailPage member={memberDetail} quests={quests}
+            onBack={()=>setMemberDetail(null)}
+            onEdit={m=>{setMemberModal(m);setMemberDetail(null);}}/>
+        )}
+
+        {tab==="completed"&&(
+          <div style={{maxWidth:560,margin:"20px auto 0",padding:"0 24px"}}>
+            <div style={{marginBottom:16}}>
+              <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",marginBottom:4}}>Hall of Fame</p>
+              <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Completed Quests</h2>
+            </div>
+            <CompletedTab quests={quests} onEdit={q=>setQuestModal(q)}/>
+          </div>
+        )}
+
+        {tab==="calendar"&&(
+          <div style={{maxWidth:560,margin:"20px auto 0",padding:"0 24px"}}>
+            <div style={{marginBottom:16}}>
+              <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Journey</p>
+              <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Streak Calendar</h2>
+            </div>
+            <StreakCalendar quests={quests}/>
+            {quests.filter(q=>q.status==="Completed"&&q.completed_at).length>0&&(
+              <div>
+                <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:12}}>Completed Timeline</p>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {quests.filter(q=>q.status==="Completed"&&q.completed_at)
+                    .sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))
+                    .map((q,i)=>{
+                      const p=getPalette(q.id);
+                      return(
+                        <div key={q.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:14,background:"rgba(255,255,255,0.025)",border:`1px solid ${p.color}20`,animation:`cardIn 0.4s ease ${i*0.05}s both`}}>
+                          <div style={{fontSize:24}}>🔥</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",fontFamily:"'Cormorant Garamond',serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                              {q.emoji&&<span style={{marginRight:6}}>{q.emoji}</span>}{q.title}
+                            </div>
+                            <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
+                              {new Date(q.completed_at).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}
+                            </div>
+                          </div>
+                          {q.photo&&<img src={q.photo} alt="" style={{width:40,height:40,borderRadius:8,objectFit:"cover",border:`1px solid ${p.color}30`,flexShrink:0}}/>}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      {(tab==="quests"||tab==="party")&&(
+        <button onClick={()=>tab==="quests"?setQuestModal({...EMPTY_QUEST}):setMemberModal({...EMPTY_MEMBER})}
+          style={{position:"fixed",bottom:36,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#e8e8e8,#ffffff)",color:"#0A0A0C",border:"none",borderRadius:28,padding:"14px 28px",display:"flex",alignItems:"center",gap:9,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",letterSpacing:"-0.01em",animation:"fabPulse 3s ease-in-out infinite",transition:"transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",zIndex:100}}
+          onMouseEnter={e=>{e.currentTarget.style.transform="translateX(-50%) scale(1.06)";e.currentTarget.style.animation="none";}}
+          onMouseLeave={e=>{e.currentTarget.style.transform="translateX(-50%) scale(1)";e.currentTarget.style.animation="fabPulse 3s ease-in-out infinite";}}>
+          <Icon d={Icons.plus} size={16} stroke="#0A0A0C"/>
+          {tab==="quests"?"New Quest":"Add Member"}
+        </button>
+      )}
+
+      {questModal&&<QuestModal quest={questModal} onSave={saveQuest} onClose={()=>setQuestModal(null)}/>}
+      {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
+      {deleteTarget&&(
+        <DeleteConfirm label={deleteTarget.type}
+          onConfirm={deleteTarget.type==="quest"?deleteQuest:deleteMember}
+          onCancel={()=>setDeleteTarget(null)}/>
+      )}
+    </div>
+  );
+}
