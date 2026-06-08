@@ -643,7 +643,7 @@ function MemberDetailPage({member,quests,onBack,onEdit}){
   const activeTogether=myQuests.filter(q=>q.status==="Active");
 
   return(
-    <div style={{maxWidth:560,margin:"0 auto",padding:"0 24px 24px",animation:"cardIn 0.4s ease both"}}>
+    <div style={{maxWidth:560,margin:"0 auto",padding:"0 24px 120px",animation:"cardIn 0.4s ease both"}}>
       {/* Back */}
       <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",
         cursor:"pointer",color:"rgba(255,255,255,0.4)",fontSize:13,fontFamily:"'DM Sans',sans-serif",
@@ -1029,14 +1029,16 @@ function QuestModal({quest,onSave,onClose}){
   return(
     <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.72:0})`,
       backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
-      justifyContent:"center",zIndex:1000,transition:"background 0.25s,backdrop-filter 0.25s"}}
+      justifyContent:"center",zIndex:2000,transition:"background 0.25s,backdrop-filter 0.25s"}}
       onClick={e=>e.target===e.currentTarget&&close()}>
       <div style={{background:"linear-gradient(160deg,#111114 0%,#0C0C0F 100%)",
         borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
         width:"100%",maxWidth:560,padding:"12px 24px 52px",
         display:"flex",flexDirection:"column",gap:20,
         transform:visible?"translateY(0)":"translateY(100%)",
-        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",maxHeight:"92vh",overflowY:"auto"}}>
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
+        maxHeight:"92vh",overflowY:"auto",overflowX:"hidden",
+        WebkitOverflowScrolling:"touch"}}>
         <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
@@ -1612,7 +1614,7 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
   const counts = STATUSES.reduce((acc,s)=>({...acc,[s]:boardQuests.filter(q=>q.status===s).length}),{});
 
   return (
-    <div style={{maxWidth:560,margin:"0 auto",padding:"0 24px 24px",animation:"cardIn 0.4s ease both"}}>
+    <div style={{maxWidth:560,margin:"0 auto",padding:"0 24px 120px",animation:"cardIn 0.4s ease both"}}>
       {/* Back */}
       <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",
         cursor:"pointer",color:"rgba(255,255,255,0.4)",fontSize:13,fontFamily:"'DM Sans',sans-serif",
@@ -2223,14 +2225,16 @@ export default function App(){
         )}
 
         {tab==="boards"&&activeBoard&&(
-          <BoardDetailPage
-            board={activeBoard} user={user} members={members}
-            allQuests={quests}
-            onBack={()=>setActiveBoard(null)}
-            onSaveQuest={saveBoardQuest}
-            onDeleteQuest={deleteBoardQuest}
-            onInvite={()=>setInviteBoard(activeBoard)}
-          />
+          <div style={{position:"relative"}}>
+            <BoardDetailPage
+              board={activeBoard} user={user} members={members}
+              allQuests={quests}
+              onBack={()=>setActiveBoard(null)}
+              onSaveQuest={saveBoardQuest}
+              onDeleteQuest={deleteBoardQuest}
+              onInvite={()=>setInviteBoard(activeBoard)}
+            />
+          </div>
         )}
 
         {tab==="party"&&!memberDetail&&(
