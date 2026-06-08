@@ -996,7 +996,14 @@ function QuestModal({quest,onSave,onClose}){
   const [visible,setVisible]=useState(false);
   const [saving,setSaving]=useState(false);
   const titleRef=useRef(null);
-  useEffect(()=>{requestAnimationFrame(()=>setVisible(true));setTimeout(()=>titleRef.current?.focus(),100);},[]);
+  useEffect(()=>{
+    requestAnimationFrame(()=>setVisible(true));
+    setTimeout(()=>titleRef.current?.focus(),100);
+    // Lock body scroll while modal is open
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return ()=>{ document.body.style.overflow = prev; };
+  },[]);
   const close=()=>{setVisible(false);setTimeout(onClose,250);};
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
 
@@ -1027,20 +1034,24 @@ function QuestModal({quest,onSave,onClose}){
     color:"rgba(255,255,255,0.3)",marginBottom:7,display:"block",fontFamily:"'DM Sans',sans-serif"};
 
   const modal = (
-    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.72:0})`,
-      backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
-      justifyContent:"center",zIndex:9999,transition:"background 0.25s,backdrop-filter 0.25s"}}
+    <div style={{position:"fixed",inset:0,
+      background:`rgba(0,0,0,${visible?0.72:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,
+      display:"flex",alignItems:"flex-end",
+      justifyContent:"center",zIndex:9999,
+      transition:"background 0.25s,backdrop-filter 0.25s"}}
       onClick={e=>e.target===e.currentTarget&&close()}>
       <div style={{background:"linear-gradient(160deg,#111114 0%,#0C0C0F 100%)",
-        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        borderRadius:"24px 24px 0 0",
+        border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
         width:"100%",maxWidth:560,padding:"12px 24px 52px",
         display:"flex",flexDirection:"column",gap:20,
         transform:visible?"translateY(0)":"translateY(100%)",
         transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
-        maxHeight:"92dvh",overflowY:"auto",overflowX:"hidden",
+        maxHeight:"85vh",overflowY:"auto",overflowX:"hidden",
         WebkitOverflowScrolling:"touch"}}>
-        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0",flexShrink:0}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
             {quest?.id?"Edit Quest":"New Quest"}
           </h2>
