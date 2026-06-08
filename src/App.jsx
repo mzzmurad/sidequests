@@ -3,13 +3,87 @@ import { useState, useEffect, useRef } from "react";
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://fbldconclzuckyotxvsk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGRjb25jbHp1Y2t5b3R4dnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MDUwMDcsImV4cCI6MjA5NjQ4MTAwN30.dFPSoQLShrnrhGdAt4K3TPZWLigtUAe4ZaI7XygCMO0";
-const USE_CLOUD = SUPABASE_URL !== "PASTE_YOUR_SUPABASE_URL_HERE";
 
-// ─── SUPABASE ─────────────────────────────────────────────────────────────────
+// ─── SUPABASE AUTH + API ───────────────────────────────────────────────────────
 const sb = {
-  h: { "Content-Type":"application/json","apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}` },
-  async getAll(table) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?order=created_at.desc`,{headers:this.h});
+  // Auth headers — updated dynamically after login
+  _token: null,
+  get h() {
+    return {
+      "Content-Type":"application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${this._token || SUPABASE_KEY}`,
+    };
+  },
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  async signUp(email, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY},
+      body:JSON.stringify({email,password}),
+    });
+    const d = await r.json();
+    if(d.error) throw new Error(d.error.message||d.msg||"Sign up failed");
+    if(d.access_token) this._token = d.access_token;
+    return d;
+  },
+
+  async signIn(email, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY},
+      body:JSON.stringify({email,password}),
+    });
+    const d = await r.json();
+    if(d.error) throw new Error(d.error.message||d.msg||"Sign in failed");
+    this._token = d.access_token;
+    localStorage.setItem("sq_token", d.access_token);
+    localStorage.setItem("sq_refresh", d.refresh_token);
+    return d;
+  },
+
+  async signOut() {
+    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      method:"POST", headers:this.h,
+    }).catch(()=>{});
+    this._token = null;
+    localStorage.removeItem("sq_token");
+    localStorage.removeItem("sq_refresh");
+  },
+
+  async refreshSession() {
+    const refresh_token = localStorage.getItem("sq_refresh");
+    if(!refresh_token) return null;
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY},
+      body:JSON.stringify({refresh_token}),
+    });
+    const d = await r.json();
+    if(d.access_token) {
+      this._token = d.access_token;
+      localStorage.setItem("sq_token", d.access_token);
+      localStorage.setItem("sq_refresh", d.refresh_token);
+      return d;
+    }
+    return null;
+  },
+
+  getUser() {
+    const token = this._token || localStorage.getItem("sq_token");
+    if(!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      if(payload.exp * 1000 < Date.now()) return null;
+      this._token = token;
+      return { id: payload.sub, email: payload.email };
+    } catch { return null; }
+  },
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  async getAll(table, filter="") {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?order=created_at.desc${filter}`,{headers:this.h});
     if(!r.ok) throw new Error(); return r.json();
   },
   async upsert(table,obj) {
@@ -21,10 +95,6 @@ const sb = {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`,{method:"DELETE",headers:this.h});
     if(!r.ok) throw new Error();
   },
-};
-const local = {
-  load:(k)=>{ try{return JSON.parse(localStorage.getItem(k)||"[]");}catch{return [];} },
-  save:(k,v)=>localStorage.setItem(k,JSON.stringify(v)),
 };
 
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
@@ -1177,12 +1247,170 @@ function DeleteConfirm({onConfirm,onCancel,label="quest"}){
   );
 }
 
+
+// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
+function AuthScreen({ onAuth }) {
+  const [mode, setMode]       = useState("signin"); // signin | signup
+  const [email, setEmail]     = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError]     = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone]       = useState(false); // signup confirmation
+
+  const submit = async () => {
+    if(!email.trim()||!password.trim()) return;
+    setLoading(true); setError("");
+    try {
+      if(mode==="signup") {
+        await sb.signUp(email.trim(), password);
+        setDone(true);
+      } else {
+        const d = await sb.signIn(email.trim(), password);
+        onAuth({ id: d.user?.id||sb.getUser()?.id, email: email.trim() });
+      }
+    } catch(e) {
+      setError(e.message||"Something went wrong. Try again.");
+    }
+    setLoading(false);
+  };
+
+  const inp = {
+    width:"100%", background:"rgba(255,255,255,0.05)",
+    border:"1px solid rgba(255,255,255,0.12)", borderRadius:14,
+    padding:"14px 16px", color:"#F0F0F0", fontSize:15, outline:"none",
+    fontFamily:"'DM Sans',sans-serif", boxSizing:"border-box",
+    transition:"border-color 0.2s",
+  };
+
+  if(done) return (
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",
+      justifyContent:"center",padding:24,fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{maxWidth:360,width:"100%",textAlign:"center",animation:"cardIn 0.5s ease both"}}>
+        <div style={{fontSize:56,marginBottom:20}}>📬</div>
+        <h2 style={{fontSize:22,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif",marginBottom:12}}>
+          Check your email
+        </h2>
+        <p style={{fontSize:14,color:"rgba(255,255,255,0.4)",lineHeight:1.7,marginBottom:24}}>
+          We sent a confirmation link to <strong style={{color:"rgba(255,255,255,0.7)"}}>{email}</strong>.
+          Click it to activate your account, then come back and sign in.
+        </p>
+        <button onClick={()=>{setDone(false);setMode("signin");}} style={{
+          padding:"13px 28px",borderRadius:14,border:"1px solid rgba(255,255,255,0.12)",
+          background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.7)",
+          cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+          Back to Sign In
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",
+      justifyContent:"center",padding:24,fontFamily:"'DM Sans',sans-serif",position:"relative",overflow:"hidden"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        @keyframes cardIn{from{opacity:0;transform:translateY(20px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+        @keyframes orb1{0%,100%{transform:translate(0,0);}50%{transform:translate(40px,-30px);}}
+        @keyframes orb2{0%,100%{transform:translate(0,0);}50%{transform:translate(-30px,40px);}}
+      `}</style>
+
+      {/* Orbs */}
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",overflow:"hidden"}}>
+        <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",
+          background:"radial-gradient(circle,rgba(192,132,252,0.08) 0%,transparent 70%)",
+          top:-100,left:-100,animation:"orb1 12s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",width:600,height:600,borderRadius:"50%",
+          background:"radial-gradient(circle,rgba(168,255,120,0.06) 0%,transparent 70%)",
+          bottom:-200,right:-100,animation:"orb2 16s ease-in-out infinite"}}/>
+      </div>
+
+      <div style={{maxWidth:380,width:"100%",animation:"cardIn 0.5s cubic-bezier(0.34,1.2,0.64,1) both",position:"relative",zIndex:1}}>
+
+        {/* Logo area */}
+        <div style={{textAlign:"center",marginBottom:40}}>
+          <div style={{fontSize:42,marginBottom:12}}>⚔️</div>
+          <h1 style={{fontSize:32,fontWeight:700,letterSpacing:"-0.03em",
+            fontFamily:"'Cormorant Garamond',serif",
+            background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+            WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:6}}>
+            Side Quests
+          </h1>
+          <p style={{fontSize:13,color:"rgba(255,255,255,0.3)"}}>
+            {mode==="signin"?"Welcome back, adventurer.":"Begin your journey."}
+          </p>
+        </div>
+
+        {/* Card */}
+        <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.09)",
+          borderRadius:24,padding:"28px 24px",display:"flex",flexDirection:"column",gap:16}}>
+
+          {/* Mode toggle */}
+          <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4,gap:4}}>
+            {["signin","signup"].map(m=>(
+              <button key={m} onClick={()=>{setMode(m);setError("");}} style={{
+                flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",
+                background:mode===m?"rgba(255,255,255,0.1)":"transparent",
+                color:mode===m?"#F0F0F0":"rgba(255,255,255,0.35)",
+                fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif",
+                transition:"all 0.2s",
+              }}>{m==="signin"?"Sign In":"Sign Up"}</button>
+            ))}
+          </div>
+
+          {/* Inputs */}
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <input value={email} onChange={e=>setEmail(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&submit()}
+              type="email" placeholder="Email address" style={inp}
+              onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.3)"}
+              onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.12)"}/>
+            <input value={password} onChange={e=>setPassword(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&submit()}
+              type="password" placeholder="Password" style={inp}
+              onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.3)"}
+              onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.12)"}/>
+          </div>
+
+          {/* Error */}
+          {error&&(
+            <div style={{padding:"10px 14px",borderRadius:10,background:"rgba(255,100,100,0.08)",
+              border:"1px solid rgba(255,100,100,0.2)",fontSize:12.5,
+              color:"rgba(255,150,150,0.9)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}>
+              {error}
+            </div>
+          )}
+
+          {/* Submit */}
+          <button onClick={submit} disabled={loading||!email.trim()||!password.trim()} style={{
+            background: email.trim()&&password.trim()
+              ? "linear-gradient(135deg,#e8e8e8,#ffffff)"
+              : "rgba(255,255,255,0.07)",
+            color: email.trim()&&password.trim() ? "#0A0A0C" : "rgba(255,255,255,0.2)",
+            border:"none",borderRadius:14,padding:"15px",
+            fontSize:15,fontWeight:700,cursor:"pointer",
+            fontFamily:"'DM Sans',sans-serif",
+            transition:"all 0.2s",opacity:loading?0.7:1,
+          }}>
+            {loading ? "…" : mode==="signin" ? "Sign In" : "Create Account"}
+          </button>
+        </div>
+
+        <p style={{textAlign:"center",marginTop:20,fontSize:12,color:"rgba(255,255,255,0.2)"}}>
+          Your quests are private and only visible to you.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App(){
+  const [user,setUser]           = useState(undefined); // undefined=loading, null=logged out, obj=logged in
   const [quests,setQuests]       = useState([]);
   const [members,setMembers]     = useState([]);
   const [filter,setFilter]       = useState("All");
-  const [tab,setTab]             = useState("quests"); // quests | party | completed | calendar
+  const [tab,setTab]             = useState("quests");
   const [questModal,setQuestModal]   = useState(null);
   const [memberModal,setMemberModal] = useState(null);
   const [deleteTarget,setDeleteTarget] = useState(null);
@@ -1190,37 +1418,74 @@ export default function App(){
   const [mounted,setMounted]     = useState(false);
   const [syncing,setSyncing]     = useState(false);
 
+  // ── Boot: check existing session ──────────────────────────────────────────
   useEffect(()=>{
     setTimeout(()=>setMounted(true),50);
-    if(USE_CLOUD){
-      setSyncing(true);
-      Promise.all([sb.getAll("quests"),sb.getAll("members")]).then(([q,m])=>{
-        setQuests(q||[]);setMembers(m||[]);setSyncing(false);
-      }).catch(()=>{setQuests(local.load("sidequests"));setMembers(local.load("members"));setSyncing(false);});
+    const existing = sb.getUser();
+    if(existing){
+      setUser(existing);
+      loadData(existing.id);
     } else {
-      setQuests(local.load("sidequests"));setMembers(local.load("members"));
+      // Try refreshing token
+      sb.refreshSession().then(d=>{
+        if(d){
+          const u=sb.getUser();
+          setUser(u);
+          if(u) loadData(u.id);
+          else setUser(null);
+        } else {
+          setUser(null);
+        }
+      }).catch(()=>setUser(null));
     }
   },[]);
 
+  const loadData = (userId) => {
+    setSyncing(true);
+    const filter = `&user_id=eq.${userId}`;
+    Promise.all([
+      sb.getAll("quests", filter),
+      sb.getAll("members", filter),
+    ]).then(([q,m])=>{
+      setQuests(q||[]);
+      setMembers(m||[]);
+      setSyncing(false);
+    }).catch(()=>{ setSyncing(false); });
+  };
+
+  const handleAuth = (u) => {
+    setUser(u);
+    loadData(u.id);
+  };
+
+  const handleSignOut = async () => {
+    await sb.signOut();
+    setUser(null);
+    setQuests([]);
+    setMembers([]);
+  };
+
   const saveQuest=async(q)=>{
-    const next=quests.find(x=>x.id===q.id)?quests.map(x=>x.id===q.id?q:x):[q,...quests];
+    const withUser = {...q, user_id: user?.id};
+    const next=quests.find(x=>x.id===q.id)?quests.map(x=>x.id===q.id?withUser:x):[withUser,...quests];
     setQuests(next);setQuestModal(null);
-    if(USE_CLOUD){try{await sb.upsert("quests",q);}catch{}}else local.save("sidequests",next);
+    try{await sb.upsert("quests",withUser);}catch(e){console.error(e);}
   };
   const deleteQuest=async()=>{
     const next=quests.filter(q=>q.id!==deleteTarget.id);
     setQuests(next);setDeleteTarget(null);
-    if(USE_CLOUD){try{await sb.delete("quests",deleteTarget.id);}catch{}}else local.save("sidequests",next);
+    try{await sb.delete("quests",deleteTarget.id);}catch(e){console.error(e);}
   };
   const saveMember=async(m)=>{
-    const next=members.find(x=>x.id===m.id)?members.map(x=>x.id===m.id?m:x):[m,...members];
+    const withUser = {...m, user_id: user?.id};
+    const next=members.find(x=>x.id===m.id)?members.map(x=>x.id===m.id?withUser:x):[withUser,...members];
     setMembers(next);setMemberModal(null);
-    if(USE_CLOUD){try{await sb.upsert("members",m);}catch{}}else local.save("members",next);
+    try{await sb.upsert("members",withUser);}catch(e){console.error(e);}
   };
   const deleteMember=async()=>{
     const next=members.filter(m=>m.id!==deleteTarget.id);
     setMembers(next);setDeleteTarget(null);
-    if(USE_CLOUD){try{await sb.delete("members",deleteTarget.id);}catch{}}else local.save("members",next);
+    try{await sb.delete("members",deleteTarget.id);}catch(e){console.error(e);}
   };
 
   const filtered=filter==="All"?quests:quests.filter(q=>q.status===filter);
@@ -1233,6 +1498,16 @@ export default function App(){
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
   ];
+
+  // Auth gate
+  if(user===undefined) return (
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{width:32,height:32,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.5)",
+        borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+    </div>
+  );
+  if(!user) return <AuthScreen onAuth={handleAuth}/>;
 
   return(
     <div style={{minHeight:"100vh",background:"#08080A",color:"#F0F0F0",
@@ -1261,13 +1536,29 @@ export default function App(){
         <div style={{maxWidth:560,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
             <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.16em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)"}}>Your Life</p>
-            {USE_CLOUD?(
-              <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:syncing?"rgba(255,212,120,0.7)":"rgba(168,255,120,0.6)",fontFamily:"'DM Sans',sans-serif"}}>
-                <Icon d={Icons.cloud} size={11} stroke="currentColor"/>{syncing?"Syncing…":"Synced"}
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {syncing&&(
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:"rgba(255,212,120,0.7)",fontFamily:"'DM Sans',sans-serif"}}>
+                  <Icon d={Icons.cloud} size={11} stroke="currentColor"/> Syncing…
+                </div>
+              )}
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
+                  maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {user?.email}
+                </span>
+                <button onClick={handleSignOut} style={{
+                  fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",
+                  background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
+                  borderRadius:6,padding:"3px 8px",cursor:"pointer",fontWeight:600,
+                  transition:"all 0.15s",
+                }}
+                  onMouseEnter={e=>{e.currentTarget.style.color="#fff";e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.color="rgba(255,255,255,0.3)";e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";}}>
+                  Sign out
+                </button>
               </div>
-            ):(
-              <div style={{fontSize:10,color:"rgba(255,120,120,0.5)",fontFamily:"'DM Sans',sans-serif"}}>⚠ Local only</div>
-            )}
+            </div>
           </div>
           <h1 style={{fontSize:30,fontWeight:700,letterSpacing:"-0.03em",marginBottom:18,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2 0%,rgba(242,242,242,0.5) 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Side Quests</h1>
           <div style={{display:"flex",gap:0,borderBottom:"1px solid rgba(255,255,255,0.06)",overflowX:"auto"}}>
