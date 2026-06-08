@@ -1423,23 +1423,16 @@ export default function App(){
   // ── Boot: check existing session ──────────────────────────────────────────
   useEffect(()=>{
     setTimeout(()=>setMounted(true),50);
-    const existing = sb.getUser();
-    if(existing){
-      setUser(existing);
-      loadData(existing.id);
-    } else {
-      // Try refreshing token
-      sb.refreshSession().then(d=>{
-        if(d){
-          const u=sb.getUser();
-          setUser(u);
-          if(u) loadData(u.id);
-          else setUser(null);
-        } else {
-          setUser(null);
-        }
-      }).catch(()=>setUser(null));
-    }
+    try {
+      const existing = sb.getUser();
+      if(existing){
+        setUser(existing);
+        setTimeout(()=>loadData(existing.id),100);
+        return;
+      }
+    } catch(e){ console.error("getUser error",e); }
+    // No valid token — go straight to login
+    setUser(null);
   },[]);
 
   const loadData = (userId) => {
@@ -1503,10 +1496,14 @@ export default function App(){
 
   // Auth gate
   if(user===undefined) return (
-    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
-      <div style={{width:32,height:32,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.5)",
-        borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",
+      justifyContent:"center",flexDirection:"column",gap:16}}>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg);}}
+        body{background:#08080A;}
+      `}</style>
+      <div style={{width:32,height:32,border:"2px solid rgba(255,255,255,0.1)",
+        borderTopColor:"rgba(255,255,255,0.5)",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
       <p style={{color:"rgba(255,255,255,0.3)",fontSize:13,fontFamily:"sans-serif"}}>Loading…</p>
     </div>
   );
