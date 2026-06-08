@@ -81,6 +81,46 @@ const sb = {
     } catch { return null; }
   },
 
+  // ── Boards ────────────────────────────────────────────────────────────────
+  async getMyBoards(userId) {
+    // Get boards where user is creator or member
+    const [created, memberships] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/boards?created_by=eq.${userId}&order=created_at.desc`, {headers:this.h}).then(r=>r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/board_members?user_id=eq.${userId}&select=board_id`, {headers:this.h}).then(r=>r.json()),
+    ]);
+    const memberBoardIds = (Array.isArray(memberships)?memberships:[]).map(m=>m.board_id).filter(Boolean);
+    if(memberBoardIds.length === 0) return Array.isArray(created)?created:[];
+    const memberBoards = await fetch(
+      `${SUPABASE_URL}/rest/v1/boards?id=in.(${memberBoardIds.join(",")})&order=created_at.desc`,
+      {headers:this.h}
+    ).then(r=>r.json());
+    const all = [...(Array.isArray(created)?created:[]), ...(Array.isArray(memberBoards)?memberBoards:[])];
+    return [...new Map(all.map(b=>[b.id,b])).values()];
+  },
+  async getBoardByInvite(code) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/boards?invite_code=eq.${code}`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d[0]:null;
+  },
+  async createBoard(board) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/boards`, {
+      method:"POST", headers:{...this.h,"Prefer":"return=representation"}, body:JSON.stringify(board)
+    }); const d=await r.json(); return Array.isArray(d)?d[0]:d;
+  },
+  async joinBoard(boardId, userId) {
+    await fetch(`${SUPABASE_URL}/rest/v1/board_members`, {
+      method:"POST", headers:{...this.h,"Prefer":"resolution=ignore-duplicates"},
+      body:JSON.stringify({id:crypto.randomUUID(),board_id:boardId,user_id:userId})
+    });
+  },
+  async getBoardQuests(boardId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/quests?board_id=eq.${boardId}&order=created_at.desc`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+  async getBoardMembers(boardId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/board_members?board_id=eq.${boardId}&select=user_id`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+
   // ── Data ──────────────────────────────────────────────────────────────────
   async getAll(table, userId="") {
     const filter = userId ? `&user_id=eq.${userId}` : "";
@@ -175,6 +215,9 @@ const Icons={
   check:   "M20 6 9 17l-5-5",
   camera:  "M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   cal:     "M3 9h18M8 2v4M16 2v4M3 4h18a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z",
+  board:   "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+  link:    "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+  copy:    "M20 9H11a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
 };
 
 // ─── SMALL HELPERS ────────────────────────────────────────────────────────────
@@ -1250,6 +1293,391 @@ function DeleteConfirm({onConfirm,onCancel,label="quest"}){
 }
 
 
+
+// ─── BOARD CARD ───────────────────────────────────────────────────────────────
+function BoardCard({ board, questCount, onClick }) {
+  const [h,setH] = useState(false);
+  const palette = getPalette(board.id);
+  return (
+    <div onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
+      onClick={onClick}
+      style={{
+        position:"relative", overflow:"hidden", cursor:"pointer",
+        background:h?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.03)",
+        border:`1px solid ${h?palette.color+"40":"rgba(255,255,255,0.07)"}`,
+        borderRadius:20, padding:"20px 20px 18px",
+        transition:"all 0.25s cubic-bezier(0.34,1.2,0.64,1)",
+        transform:h?"translateY(-2px)":"none",
+        boxShadow:h?`0 12px 32px rgba(0,0,0,0.4),0 0 0 1px ${palette.color}15`:"none",
+        animation:"cardIn 0.4s ease both",
+      }}>
+      <div style={{position:"absolute",top:0,left:0,right:0,height:2,
+        background:palette.grad,opacity:h?0.9:0.4,transition:"opacity 0.3s"}}/>
+      <div style={{position:"absolute",top:-10,right:-10,width:80,height:80,borderRadius:"50%",
+        background:`radial-gradient(circle,${palette.color}15 0%,transparent 70%)`,pointerEvents:"none"}}/>
+      <div style={{fontSize:28,marginBottom:10}}>🗺️</div>
+      <h3 style={{margin:"0 0 4px",fontSize:17,fontWeight:700,color:"#F2F2F2",
+        fontFamily:"'Cormorant Garamond',serif",letterSpacing:"-0.01em"}}>{board.name}</h3>
+      {board.description&&(
+        <p style={{margin:"0 0 12px",fontSize:13,color:"rgba(255,255,255,0.35)",
+          fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}>{board.description}</p>
+      )}
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+          ⚔️ <strong style={{color:palette.color}}>{questCount}</strong> quest{questCount!==1?"s":""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── CREATE BOARD MODAL ────────────────────────────────────────────────────────
+function CreateBoardModal({ onSave, onClose }) {
+  const [name,setName]   = useState("");
+  const [desc,setDesc]   = useState("");
+  const [saving,setSaving] = useState(false);
+  const [visible,setVisible] = useState(false);
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  const inp = {width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.09)",
+    borderRadius:12,padding:"12px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
+    fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",transition:"border-color 0.2s"};
+  const lbl = {fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+    color:"rgba(255,255,255,0.3)",marginBottom:7,display:"block",fontFamily:"'DM Sans',sans-serif"};
+
+  return (
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.72:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
+      justifyContent:"center",zIndex:1000,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
+        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        width:"100%",maxWidth:560,padding:"12px 24px 52px",
+        display:"flex",flexDirection:"column",gap:20,
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
+            New Board
+          </h2>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:10,padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+            <Icon d={Icons.x} size={16}/>
+          </button>
+        </div>
+        <p style={{margin:0,fontSize:13,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+          A board is a shared space. Create it, share the invite link, and anyone who joins can see and add quests to it.
+        </p>
+        <div><label style={lbl}>Board Name *</label>
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Istanbul Trip, Squad Goals…"
+            style={inp} autoFocus
+            onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.22)"}
+            onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.09)"}/>
+        </div>
+        <div><label style={lbl}>Description</label>
+          <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="What's this board about?"
+            style={inp}
+            onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.22)"}
+            onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.09)"}/>
+        </div>
+        <button onClick={async()=>{
+          if(!name.trim()||saving) return;
+          setSaving(true);
+          await onSave(name.trim(), desc.trim());
+          setSaving(false);
+        }} disabled={!name.trim()||saving} style={{
+          background:name.trim()?"linear-gradient(135deg,#e8e8e8,#fff)":"rgba(255,255,255,0.08)",
+          color:name.trim()?"#0A0A0C":"rgba(255,255,255,0.2)",border:"none",borderRadius:14,
+          padding:"15px",fontSize:15,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed",
+          fontFamily:"'DM Sans',sans-serif"}}>
+          {saving?"Creating…":"Create Board"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── INVITE LINK MODAL ────────────────────────────────────────────────────────
+function InviteModal({ board, onClose }) {
+  const [copied,setCopied] = useState(false);
+  const [visible,setVisible] = useState(false);
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+  const link = `${window.location.origin}?join=${board.invite_code}`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(link).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.72:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
+      justifyContent:"center",zIndex:1000,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
+        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        width:"100%",maxWidth:560,padding:"12px 24px 52px",
+        display:"flex",flexDirection:"column",gap:20,
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
+            Invite to {board.name}
+          </h2>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:10,padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+            <Icon d={Icons.x} size={16}/>
+          </button>
+        </div>
+        <p style={{margin:0,fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+          Share this link. Anyone who opens it can join the board and see all shared quests.
+        </p>
+        {/* Link display */}
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",
+          borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:10}}>
+          <Icon d={Icons.link} size={15} stroke="rgba(255,255,255,0.3)"/>
+          <span style={{flex:1,fontSize:12.5,color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif",
+            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{link}</span>
+        </div>
+        <button onClick={copy} style={{
+          background:copied?"rgba(168,255,120,0.15)":"linear-gradient(135deg,#e8e8e8,#fff)",
+          color:copied?"#A8FF78":"#0A0A0C",border:copied?"1px solid rgba(168,255,120,0.3)":"none",
+          borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,cursor:"pointer",
+          fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          <Icon d={Icons.copy} size={16} stroke="currentColor"/>
+          {copied?"Copied!":"Copy Invite Link"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── JOIN BOARD SCREEN ────────────────────────────────────────────────────────
+function JoinBoardScreen({ inviteCode, user, onJoined, onSkip }) {
+  const [board,setBoard]   = useState(null);
+  const [loading,setLoading] = useState(true);
+  const [joining,setJoining] = useState(false);
+  const [joined,setJoined]   = useState(false);
+  const [error,setError]     = useState("");
+
+  useEffect(()=>{
+    sb.getBoardByInvite(inviteCode).then(b=>{
+      setBoard(b); setLoading(false);
+    }).catch(()=>{ setError("Board not found."); setLoading(false); });
+  },[inviteCode]);
+
+  const join = async () => {
+    if(!board) return;
+    setJoining(true);
+    try {
+      await sb.joinBoard(board.id, user.id);
+      setJoined(true);
+      setTimeout(()=>onJoined(board), 1500);
+    } catch(e) {
+      setError("Failed to join. Try again.");
+    }
+    setJoining(false);
+  };
+
+  if(loading) return (
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{width:28,height:28,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.5)",
+        borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg);}}body{background:#08080A;}`}</style>
+    </div>
+  );
+
+  const palette = board ? getPalette(board.id) : QUEST_PALETTES[0];
+
+  return (
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",
+      justifyContent:"center",padding:24,fontFamily:"'DM Sans',sans-serif",position:"relative",overflow:"hidden"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{background:#08080A;}
+        @keyframes cardIn{from{opacity:0;transform:translateY(20px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+        @keyframes spin{to{transform:rotate(360deg);}}
+      `}</style>
+
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",overflow:"hidden"}}>
+        <div style={{position:"absolute",width:400,height:400,borderRadius:"50%",
+          background:`radial-gradient(circle,${palette.color}12 0%,transparent 70%)`,
+          top:-50,left:-50}}/>
+      </div>
+
+      <div style={{maxWidth:380,width:"100%",animation:"cardIn 0.5s ease both",position:"relative",zIndex:1}}>
+        {joined ? (
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:56,marginBottom:16}}>🎉</div>
+            <h2 style={{fontSize:24,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif",marginBottom:8}}>
+              You joined!
+            </h2>
+            <p style={{fontSize:14,color:"rgba(255,255,255,0.4)"}}>Taking you to the board…</p>
+          </div>
+        ) : error && !board ? (
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:48,marginBottom:16}}>❌</div>
+            <h2 style={{fontSize:20,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif",marginBottom:8}}>
+              Invalid invite
+            </h2>
+            <p style={{fontSize:14,color:"rgba(255,255,255,0.4)",marginBottom:24}}>This invite link doesn't exist or has expired.</p>
+            <button onClick={onSkip} style={{padding:"13px 28px",borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",
+              background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.7)",cursor:"pointer",
+              fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>Go to My App</button>
+          </div>
+        ) : board ? (
+          <div style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${palette.color}30`,
+            borderRadius:24,padding:"32px 24px",textAlign:"center"}}>
+            <div style={{position:"relative",height:2,background:palette.grad,borderRadius:1,marginBottom:28,
+              boxShadow:`0 0 12px ${palette.glow}`}}/>
+            <div style={{fontSize:48,marginBottom:16}}>🗺️</div>
+            <p style={{fontSize:12,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+              color:"rgba(255,255,255,0.3)",marginBottom:8,fontFamily:"'DM Sans',sans-serif"}}>
+              You've been invited to
+            </p>
+            <h2 style={{fontSize:26,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif",marginBottom:8}}>
+              {board.name}
+            </h2>
+            {board.description&&(
+              <p style={{fontSize:13,color:"rgba(255,255,255,0.4)",marginBottom:20,lineHeight:1.6}}>{board.description}</p>
+            )}
+            <p style={{fontSize:12,color:"rgba(255,255,255,0.25)",marginBottom:24}}>
+              Joining as <strong style={{color:"rgba(255,255,255,0.5)"}}>{user.email}</strong>
+            </p>
+            {error&&<p style={{fontSize:12,color:"#FF7878",marginBottom:12}}>{error}</p>}
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={onSkip} style={{flex:1,padding:"13px",borderRadius:12,
+                background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",
+                color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+                Skip
+              </button>
+              <button onClick={join} disabled={joining} style={{flex:2,padding:"13px",borderRadius:12,
+                background:`linear-gradient(135deg,${palette.color}cc,${palette.color})`,
+                color:"#0A0A0C",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,
+                fontFamily:"'DM Sans',sans-serif",opacity:joining?0.7:1}}>
+                {joining?"Joining…":"Join Board"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ─── BOARD DETAIL PAGE ────────────────────────────────────────────────────────
+function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest, onDeleteQuest, onInvite }) {
+  const [boardQuests, setBoardQuests] = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [questModal, setQuestModal]   = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const palette = getPalette(board.id);
+
+  useEffect(()=>{
+    setLoading(true);
+    sb.getBoardQuests(board.id).then(q=>{ setBoardQuests(q); setLoading(false); });
+  },[board.id]);
+
+  const saveQuest = async(q) => {
+    const withBoard = {...q, user_id:user.id, board_id:board.id};
+    await onSaveQuest(withBoard, true);
+    setBoardQuests(prev => prev.find(x=>x.id===q.id) ? prev.map(x=>x.id===q.id?withBoard:x) : [withBoard,...prev]);
+    setQuestModal(null);
+  };
+
+  const deleteQuest = async() => {
+    await onDeleteQuest(deleteTarget);
+    setBoardQuests(prev=>prev.filter(q=>q.id!==deleteTarget));
+    setDeleteTarget(null);
+  };
+
+  const filter = "All";
+  const counts = STATUSES.reduce((acc,s)=>({...acc,[s]:boardQuests.filter(q=>q.status===s).length}),{});
+
+  return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:"0 24px 24px",animation:"cardIn 0.4s ease both"}}>
+      {/* Back */}
+      <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",
+        cursor:"pointer",color:"rgba(255,255,255,0.4)",fontSize:13,fontFamily:"'DM Sans',sans-serif",
+        padding:"0 0 20px",fontWeight:600}}>
+        <Icon d={Icons.back} size={16}/> All Boards
+      </button>
+
+      {/* Board header */}
+      <div style={{position:"relative",background:`${palette.color}08`,border:`1px solid ${palette.color}25`,
+        borderRadius:20,padding:"22px 20px",marginBottom:20,overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:palette.grad}}/>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+              color:palette.color,marginBottom:6,fontFamily:"'DM Sans',sans-serif"}}>Shared Board</div>
+            <h2 style={{fontSize:22,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif",marginBottom:4}}>
+              {board.name}
+            </h2>
+            {board.description&&<p style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>{board.description}</p>}
+          </div>
+          <button onClick={onInvite} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
+            borderRadius:12,border:`1px solid ${palette.color}40`,background:`${palette.color}10`,
+            color:palette.color,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+            flexShrink:0,whiteSpace:"nowrap"}}>
+            <Icon d={Icons.link} size={13} stroke="currentColor"/> Invite
+          </button>
+        </div>
+        <div style={{marginTop:14,display:"flex",gap:14}}>
+          {[{l:"Quests",v:boardQuests.length,c:"#F0F0F0"},{l:"Active",v:counts["Active"]||0,c:"#A8FF78"},{l:"Done",v:counts["Completed"]||0,c:"#78C1FF"}].map(({l,v,c})=>(
+            <div key={l} style={{textAlign:"center"}}>
+              <div style={{fontSize:20,fontWeight:700,color:c,fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
+              <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:"0.08em",marginTop:3,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quest list */}
+      {loading ? (
+        <div style={{textAlign:"center",padding:"40px 0"}}>
+          <div style={{width:24,height:24,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.5)",
+            borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto"}}/>
+        </div>
+      ) : boardQuests.length===0 ? (
+        <div style={{textAlign:"center",padding:"60px 0"}}>
+          <div style={{fontSize:40,marginBottom:14,opacity:0.15}}>🗺️</div>
+          <p style={{fontSize:15,color:"rgba(255,255,255,0.2)",lineHeight:1.7}}>No quests yet.<br/>Add the first one!</p>
+        </div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {boardQuests.map((q,i)=>(
+            <QuestCard key={q.id} quest={q} members={members} index={i}
+              onEdit={q=>setQuestModal(q)} onDelete={id=>setDeleteTarget(id)}/>
+          ))}
+        </div>
+      )}
+
+      {/* Add quest FAB */}
+      <button onClick={()=>setQuestModal({...EMPTY_QUEST})}
+        style={{position:"fixed",bottom:36,left:"50%",transform:"translateX(-50%)",
+          background:`linear-gradient(135deg,${palette.color}cc,${palette.color})`,
+          color:"#0A0A0C",border:"none",borderRadius:28,
+          padding:"14px 28px",display:"flex",alignItems:"center",gap:9,
+          fontSize:14,fontWeight:700,cursor:"pointer",
+          fontFamily:"'DM Sans',sans-serif",zIndex:100,
+          boxShadow:`0 8px 32px ${palette.glow}`}}>
+        <Icon d={Icons.plus} size={16} stroke="#0A0A0C"/> Add Quest
+      </button>
+
+      {questModal&&<QuestModal quest={questModal} onSave={saveQuest} onClose={()=>setQuestModal(null)}/>}
+      {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
+      {inviteBoard&&<InviteModal board={inviteBoard} onClose={()=>setInviteBoard(null)}/>}
+      {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
+    </div>
+  );
+}
+
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
@@ -1408,9 +1836,14 @@ function AuthScreen({ onAuth }) {
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App(){
-  const [user,setUser]           = useState(undefined); // undefined=loading, null=logged out, obj=logged in
+  const [user,setUser]           = useState(undefined);
   const [quests,setQuests]       = useState([]);
   const [members,setMembers]     = useState([]);
+  const [boards,setBoards]       = useState([]);
+  const [activeBoard,setActiveBoard] = useState(null); // board being viewed
+  const [inviteBoard,setInviteBoard] = useState(null); // board to show invite modal for
+  const [showCreateBoard,setShowCreateBoard] = useState(false);
+  const [inviteCode,setInviteCode] = useState(null); // ?join=xxx from URL
   const [filter,setFilter]       = useState("All");
   const [tab,setTab]             = useState("quests");
   const [questModal,setQuestModal]   = useState(null);
@@ -1420,11 +1853,14 @@ export default function App(){
   const [mounted,setMounted]     = useState(false);
   const [syncing,setSyncing]     = useState(false);
 
-  // ── Boot: check existing session ──────────────────────────────────────────
+  // ── Boot: check existing session + invite code ────────────────────────────
   useEffect(()=>{
     setMounted(true);
-    // Always go to login on load — user must sign in each session
-    // (token auto-fills the email field if they were logged in before)
+    // Check for invite code in URL
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("join");
+    if(code) setInviteCode(code);
+
     const token = localStorage.getItem("sq_token");
     if(token){
       try{
@@ -1446,9 +1882,11 @@ export default function App(){
     Promise.all([
       sb.getAll("quests", userId),
       sb.getAll("members", userId),
-    ]).then(([q,m])=>{
+      sb.getMyBoards(userId),
+    ]).then(([q,m,b])=>{
       setQuests(Array.isArray(q)?q:[]);
       setMembers(Array.isArray(m)?m:[]);
+      setBoards(Array.isArray(b)?b:[]);
       setSyncing(false);
     }).catch((e)=>{ console.error("loadData failed",e); setSyncing(false); });
   };
@@ -1489,16 +1927,57 @@ export default function App(){
     try{await sb.delete("members",deleteTarget.id);}catch(e){console.error(e);}
   };
 
-  const filtered=filter==="All"?quests:quests.filter(q=>q.status===filter);
-  const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:quests.filter(q=>q.status===s).length}),{});
-  const completedCount=quests.filter(q=>q.status==="Completed").length;
+  const createBoard = async(name, description) => {
+    const invite_code = Math.random().toString(36).slice(2,8).toUpperCase();
+    const board = { id:crypto.randomUUID(), name, description, created_by:user.id, invite_code };
+    try {
+      await sb.createBoard(board);
+      setBoards(prev=>[board,...prev]);
+      setShowCreateBoard(false);
+      setActiveBoard(board);
+      setTab("boards");
+    } catch(e) { console.error("createBoard failed",e); }
+  };
+
+  const saveBoardQuest = async(q, isBoard=false) => {
+    try { await sb.upsert("quests", q); } catch(e) { console.error(e); }
+  };
+
+  const deleteBoardQuest = async(id) => {
+    try { await sb.delete("quests", id); } catch(e) { console.error(e); }
+  };
+
+  const handleJoinedBoard = (board) => {
+    setBoards(prev=>[...prev.filter(b=>b.id!==board.id), board]);
+    setInviteCode(null);
+    setActiveBoard(board);
+    setTab("boards");
+    // Clear URL
+    window.history.replaceState({}, "", window.location.pathname);
+  };
+
+  const filtered=filter==="All"?quests.filter(q=>!q.board_id):quests.filter(q=>!q.board_id&&q.status===filter);
+  const personalQuests = quests.filter(q=>!q.board_id);
+  const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:personalQuests.filter(q=>q.status===s).length}),{});
+  const completedCount=personalQuests.filter(q=>q.status==="Completed").length;
 
   const TABS=[
-    {id:"quests",   label:"Quests",   icon:Icons.shield, count:quests.length},
+    {id:"quests",   label:"Quests",   icon:Icons.shield, count:personalQuests.length},
+    {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length},
     {id:"party",    label:"Party",    icon:Icons.users,  count:members.length},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
   ];
+
+  // Invite code gate — show join screen before main app if URL has ?join=
+  if(user && inviteCode) return (
+    <JoinBoardScreen
+      inviteCode={inviteCode}
+      user={user}
+      onJoined={handleJoinedBoard}
+      onSkip={()=>{ setInviteCode(null); window.history.replaceState({},"",window.location.pathname); }}
+    />
+  );
 
   // Auth gate
   if(user===undefined) return (
@@ -1628,6 +2107,60 @@ export default function App(){
           </div>
         )}
 
+        {/* BOARDS TAB */}
+        {tab==="boards"&&!activeBoard&&(
+          <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 0"}}>
+            <div style={{marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+                  color:"rgba(255,255,255,0.2)",marginBottom:4}}>Shared</p>
+                <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+                  background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+                  WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Boards</h2>
+              </div>
+              <button onClick={()=>setShowCreateBoard(true)} style={{display:"flex",alignItems:"center",gap:7,
+                padding:"10px 16px",borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",
+                background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.7)",
+                cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+                <Icon d={Icons.plus} size={14}/> New Board
+              </button>
+            </div>
+            {boards.length===0 ? (
+              <div style={{textAlign:"center",padding:"60px 0",animation:"cardIn 0.5s ease both"}}>
+                <div style={{fontSize:48,marginBottom:16,opacity:0.15}}>🗺️</div>
+                <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7,marginBottom:20}}>
+                  No boards yet.<br/>Create one or join via an invite link.
+                </p>
+                <button onClick={()=>setShowCreateBoard(true)} style={{padding:"12px 24px",borderRadius:14,
+                  background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",
+                  color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:14,fontWeight:600,
+                  fontFamily:"'DM Sans',sans-serif"}}>Create your first board</button>
+              </div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {boards.map(board=>{
+                  const bqCount = quests.filter(q=>q.board_id===board.id).length;
+                  return(
+                    <BoardCard key={board.id} board={board} questCount={bqCount}
+                      onClick={()=>setActiveBoard(board)}/>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==="boards"&&activeBoard&&(
+          <BoardDetailPage
+            board={activeBoard} user={user} members={members}
+            allQuests={quests}
+            onBack={()=>setActiveBoard(null)}
+            onSaveQuest={saveBoardQuest}
+            onDeleteQuest={deleteBoardQuest}
+            onInvite={()=>setInviteBoard(activeBoard)}
+          />
+        )}
+
         {tab==="party"&&!memberDetail&&(
           <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 0"}}>
             <div style={{marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -1710,17 +2243,23 @@ export default function App(){
         )}
       </main>
 
-      {(tab==="quests"||tab==="party")&&(
-        <button onClick={()=>tab==="quests"?setQuestModal({...EMPTY_QUEST}):setMemberModal({...EMPTY_MEMBER})}
+      {(tab==="quests"||tab==="party"||tab==="boards")&&!activeBoard&&(
+        <button onClick={()=>{
+          if(tab==="quests") setQuestModal({...EMPTY_QUEST});
+          else if(tab==="party") setMemberModal({...EMPTY_MEMBER});
+          else if(tab==="boards") setShowCreateBoard(true);
+        }}
           style={{position:"fixed",bottom:36,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#e8e8e8,#ffffff)",color:"#0A0A0C",border:"none",borderRadius:28,padding:"14px 28px",display:"flex",alignItems:"center",gap:9,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",letterSpacing:"-0.01em",animation:"fabPulse 3s ease-in-out infinite",transition:"transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",zIndex:100}}
           onMouseEnter={e=>{e.currentTarget.style.transform="translateX(-50%) scale(1.06)";e.currentTarget.style.animation="none";}}
           onMouseLeave={e=>{e.currentTarget.style.transform="translateX(-50%) scale(1)";e.currentTarget.style.animation="fabPulse 3s ease-in-out infinite";}}>
           <Icon d={Icons.plus} size={16} stroke="#0A0A0C"/>
-          {tab==="quests"?"New Quest":"Add Member"}
+          {tab==="quests"?"New Quest":tab==="boards"?"New Board":"Add Member"}
         </button>
       )}
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} onClose={()=>setQuestModal(null)}/>}
+      {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
+      {inviteBoard&&<InviteModal board={inviteBoard} onClose={()=>setInviteBoard(null)}/>}
       {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
       {deleteTarget&&(
         <DeleteConfirm label={deleteTarget.type}
@@ -1730,3 +2269,4 @@ export default function App(){
     </div>
   );
 }
+
