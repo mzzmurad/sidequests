@@ -1322,7 +1322,7 @@ function DeleteConfirm({onConfirm,onCancel,label="quest"}){
 
 
 // ─── BOARD CARD ───────────────────────────────────────────────────────────────
-function BoardCard({ board, questCount, onClick }) {
+function BoardCard({ board, questCount, onClick, onDelete }) {
   const [h,setH] = useState(false);
   const palette = getPalette(board.id);
   return (
@@ -1342,6 +1342,24 @@ function BoardCard({ board, questCount, onClick }) {
         background:palette.grad,opacity:h?0.9:0.4,transition:"opacity 0.3s"}}/>
       <div style={{position:"absolute",top:-10,right:-10,width:80,height:80,borderRadius:"50%",
         background:`radial-gradient(circle,${palette.color}15 0%,transparent 70%)`,pointerEvents:"none"}}/>
+
+      {/* Delete button — top right, visible on hover */}
+      <button
+        onClick={e=>{ e.stopPropagation(); onDelete(board.id); }}
+        style={{
+          position:"absolute", top:12, right:12,
+          background:"rgba(255,80,80,0.08)", border:"1px solid rgba(255,80,80,0.2)",
+          borderRadius:8, padding:"5px 7px", cursor:"pointer",
+          color:"rgba(255,120,120,0.7)", display:"flex", alignItems:"center",
+          opacity:h?1:0, transition:"opacity 0.2s, background 0.15s",
+          zIndex:2,
+        }}
+        onMouseEnter={e=>e.currentTarget.style.background="rgba(255,80,80,0.18)"}
+        onMouseLeave={e=>e.currentTarget.style.background="rgba(255,80,80,0.08)"}
+      >
+        <Icon d={Icons.trash} size={13}/>
+      </button>
+
       <div style={{fontSize:28,marginBottom:10}}>🗺</div>
       <h3 style={{margin:"0 0 4px",fontSize:17,fontWeight:700,color:"#F2F2F2",
         fontFamily:"'Cormorant Garamond',serif",letterSpacing:"-0.01em"}}>{board.name}</h3>
@@ -1988,6 +2006,20 @@ export default function App(){
     try{await sb.delete("members",deleteTarget.id);}catch(e){console.error(e);}
   };
 
+  const deleteBoard = async(boardId) => {
+    setBoards(prev=>prev.filter(b=>b.id!==boardId));
+    setDeleteTarget({id:boardId, type:"board"});
+  };
+
+  const confirmDeleteBoard = async() => {
+    const boardId = deleteTarget.id;
+    try {
+      await sb.delete("boards", boardId);
+    } catch(e) { console.error(e); }
+    setBoards(prev=>prev.filter(b=>b.id!==boardId));
+    setDeleteTarget(null);
+  };
+
   const createBoard = async(name, description) => {
     const invite_code = Math.random().toString(36).slice(2,8).toUpperCase();
     const board = { id:crypto.randomUUID(), name, description, created_by:user.id, invite_code };
@@ -2229,7 +2261,8 @@ export default function App(){
                   const bqCount = quests.filter(q=>q.board_id===board.id).length;
                   return(
                     <BoardCard key={board.id} board={board} questCount={bqCount}
-                      onClick={()=>setActiveBoard(board)}/>
+                      onClick={()=>setActiveBoard(board)}
+                      onDelete={()=>setDeleteTarget({id:board.id,type:"board"})}/>
                   );
                 })}
               </div>
@@ -2352,7 +2385,11 @@ export default function App(){
       {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
       {deleteTarget&&(
         <DeleteConfirm label={deleteTarget.type}
-          onConfirm={deleteTarget.type==="quest"?deleteQuest:deleteMember}
+          onConfirm={
+            deleteTarget.type==="quest"?deleteQuest:
+            deleteTarget.type==="board"?confirmDeleteBoard:
+            deleteMember
+          }
           onCancel={()=>setDeleteTarget(null)}/>
       )}
     </div>
