@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, createPortal } from "react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://fbldconclzuckyotxvsk.supabase.co";
@@ -1026,10 +1026,10 @@ function QuestModal({quest,onSave,onClose}){
   const lbl={fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
     color:"rgba(255,255,255,0.3)",marginBottom:7,display:"block",fontFamily:"'DM Sans',sans-serif"};
 
-  return(
+  const modal = (
     <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.72:0})`,
       backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
-      justifyContent:"center",zIndex:2000,transition:"background 0.25s,backdrop-filter 0.25s"}}
+      justifyContent:"center",zIndex:9999,transition:"background 0.25s,backdrop-filter 0.25s"}}
       onClick={e=>e.target===e.currentTarget&&close()}>
       <div style={{background:"linear-gradient(160deg,#111114 0%,#0C0C0F 100%)",
         borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
@@ -1037,7 +1037,7 @@ function QuestModal({quest,onSave,onClose}){
         display:"flex",flexDirection:"column",gap:20,
         transform:visible?"translateY(0)":"translateY(100%)",
         transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
-        maxHeight:"92vh",overflowY:"auto",overflowX:"hidden",
+        maxHeight:"92dvh",overflowY:"auto",overflowX:"hidden",
         WebkitOverflowScrolling:"touch"}}>
         <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1165,6 +1165,7 @@ function QuestModal({quest,onSave,onClose}){
       </div>
     </div>
   );
+  return createPortal(modal, document.body);
 }
 
 // ─── MEMBER MODAL ─────────────────────────────────────────────────────────────
