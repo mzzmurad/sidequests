@@ -159,7 +159,7 @@ const getPalette=(id)=>{
 };
 
 // ─── CHARACTER ENGINE ─────────────────────────────────────────────────────────
-const AVATARS=["🧙","🧝","🧛","🧜","🦸","🧚","🪄",⚔️","🛡️","🏹","🔮","💀","🐉","🦅","🌙","⭐","🔥","❄️","⚡","🌊"];
+const AVATARS=["🧙","🧝","🧛","🧜","🦸","🧚","🔮","💀","🐉","🦅","🌙","⭐","🔥","⚡","🌊","👑","🎯","🎭","🗝","🏆"];
 const AVATAR_COLORS=["#C084FC","#F472B6","#34D399","#FBBF24","#60A5FA","#F87171","#A3E635","#E879F9","#2DD4BF","#FB923C"];
 const TITLES=["Wizard","Ranger","Rogue","Paladin","Bard","Druid","Warlock","Monk","Fighter","Sorcerer","Cleric","Barbarian"];
 const getCharacter=(name)=>{
@@ -174,7 +174,7 @@ const getTitle=(name)=>{
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STATUSES=["Active","Completed","On Hold","Abandoned"];
 const STATUS_META={
-  Active:   {color:"#A8FF78",glow:"rgba(168,255,120,0.25)",emoji:"⚔️"},
+  Active:   {color:"#A8FF78",glow:"rgba(168,255,120,0.25)",emoji:⚔️"},
   Completed:{color:"#78C1FF",glow:"rgba(120,193,255,0.25)",emoji:"✦"},
   "On Hold":{color:"#FFD478",glow:"rgba(255,212,120,0.25)",emoji:"⏸"},
   Abandoned:{color:"#FF7878",glow:"rgba(255,120,120,0.25)",emoji:"✗"},
