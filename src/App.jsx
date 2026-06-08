@@ -159,7 +159,7 @@ const getPalette=(id)=>{
 };
 
 // ─── CHARACTER ENGINE ─────────────────────────────────────────────────────────
-const AVATARS=["🧙","🧝","🧛","🧜","🦸","🧚","🪄","⚔️","🛡️","🏹","🔮","💀","🐉","🦅","🌙","⭐","🔥","❄️","⚡","🌊"];
+const AVATARS=["🧙","🧝","🧛","🧜","🦸","🧚","🪄",⚔️","🛡️","🏹","🔮","💀","🐉","🦅","🌙","⭐","🔥","❄️","⚡","🌊"];
 const AVATAR_COLORS=["#C084FC","#F472B6","#34D399","#FBBF24","#60A5FA","#F87171","#A3E635","#E879F9","#2DD4BF","#FB923C"];
 const TITLES=["Wizard","Ranger","Rogue","Paladin","Bard","Druid","Warlock","Monk","Fighter","Sorcerer","Cleric","Barbarian"];
 const getCharacter=(name)=>{
@@ -1671,8 +1671,6 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
       </button>
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} onClose={()=>setQuestModal(null)}/>}
-      {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
-      {inviteBoard&&<InviteModal board={inviteBoard} onClose={()=>setInviteBoard(null)}/>}
       {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
     </div>
   );
