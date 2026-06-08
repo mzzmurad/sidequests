@@ -1624,11 +1624,7 @@ export default function App(){
                 ))}
               </div>
             )}
-            {!USE_CLOUD&&(
-              <div style={{marginTop:24,padding:"14px 16px",borderRadius:14,background:"rgba(255,120,120,0.06)",border:"1px solid rgba(255,120,120,0.15)",fontSize:12,color:"rgba(255,180,180,0.7)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
-                ⚠️ <strong>Local only.</strong> Add Supabase credentials to sync across devices.
-              </div>
-            )}
+
           </div>
         )}
 
