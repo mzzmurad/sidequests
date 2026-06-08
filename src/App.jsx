@@ -1422,16 +1422,22 @@ export default function App(){
 
   // ── Boot: check existing session ──────────────────────────────────────────
   useEffect(()=>{
-    setTimeout(()=>setMounted(true),50);
-    try {
-      const existing = sb.getUser();
-      if(existing){
-        setUser(existing);
-        setTimeout(()=>loadData(existing.id),100);
-        return;
-      }
-    } catch(e){ console.error("getUser error",e); }
-    // No valid token — go straight to login
+    setMounted(true);
+    // Always go to login on load — user must sign in each session
+    // (token auto-fills the email field if they were logged in before)
+    const token = localStorage.getItem("sq_token");
+    if(token){
+      try{
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        if(payload.exp * 1000 > Date.now()){
+          const u = { id: payload.sub, email: payload.email };
+          sb._token = token;
+          setUser(u);
+          loadData(u.id);
+          return;
+        }
+      } catch(e){ console.log("token parse failed", e); }
+    }
     setUser(null);
   },[]);
 
