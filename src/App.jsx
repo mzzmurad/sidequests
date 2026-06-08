@@ -174,7 +174,7 @@ const getTitle=(name)=>{
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STATUSES=["Active","Completed","On Hold","Abandoned"];
 const STATUS_META={
-  Active:   {color:"#A8FF78",glow:"rgba(168,255,120,0.25)",emoji:⚔️"},
+  Active:   {color:"#A8FF78",glow:"rgba(168,255,120,0.25)",emoji:"⚔"},
   Completed:{color:"#78C1FF",glow:"rgba(120,193,255,0.25)",emoji:"✦"},
   "On Hold":{color:"#FFD478",glow:"rgba(255,212,120,0.25)",emoji:"⏸"},
   Abandoned:{color:"#FF7878",glow:"rgba(255,120,120,0.25)",emoji:"✗"},
@@ -184,11 +184,11 @@ const EMPTY_MEMBER={id:null,name:"",role:"",note:"",created_at:null};
 
 // ─── EMOJI PICKER DATA ────────────────────────────────────────────────────────
 const EMOJI_GROUPS={
-  "Adventure":["⚔️","🏔️","🗺️","🧭","🏕️","🚀","🛸","🌋","🏴‍☠️","🗝️","🔮","⚡","🌊","🦅","🐉","🌙","☄️","🔥","💎","🏆"],
-  "Life":     ["❤️","🎯","💡","📚","🎨","🎵","🍀","🌱","✨","🦋","🌸","🌈","🎭","🎪","🎲","🧩","🪄","🎁","🏠","👑"],
-  "People":   ["🤝","👥","💪","🧠","👁️","🙌","✊","🫀","🧬","🤺","🧗","🏄","🧘","🥊","🎤","🎬","🎯","🏇","🤿","🪂"],
-  "Places":   ["🌍","🗼","🏯","🏛️","🕌","⛩️","🌁","🏖️","🏜️","🌃","🎡","🚂","✈️","⛵","🌉","🏟️","🗽","🎠","🌄","🏙️"],
-  "Objects":  ["💰","📱","🔬","🧪","⚙️","🔑","📜","🧲","💊","🎸","🎺","🥁","🎻","🔭","🪐","🧸","🪆","🎀","🧧","🪩"],
+  "Adventure":["⚔","🏔","🗺","🧭","🏕","🚀","🛸","🌋","🏴‍☠","🗝","🔮","⚡","🌊","🦅","🐉","🌙","☄","🔥","💎","🏆"],
+  "Life":     ["❤","🎯","💡","📚","🎨","🎵","🍀","🌱","✨","🦋","🌸","🌈","🎭","🎪","🎲","🧩","🪄","🎁","🏠","👑"],
+  "People":   ["🤝","👥","💪","🧠","👁","🙌","✊","🫀","🧬","🤺","🧗","🏄","🧘","🥊","🎤","🎬","🎯","🏇","🤿","🪂"],
+  "Places":   ["🌍","🗼","🏯","🏛","🕌","⛩","🌁","🏖","🏜","🌃","🎡","🚂","✈","⛵","🌉","🏟","🗽","🎠","🌄","🏙"],
+  "Objects":  ["💰","📱","🔬","🧪","⚙","🔑","📜","🧲","💊","🎸","🎺","🥁","🎻","🔭","🪐","🧸","🪆","🎀","🧧","🪩"],
 };
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -548,7 +548,7 @@ function StreakCalendar({quests}){
       <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:4,
         fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}><span>🔥</span> quest completed</div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}><span>⚔️</span> quest started</div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}><span>⚔</span> quest started</div>
       </div>
     </div>
   );
@@ -713,7 +713,7 @@ function MemberDetailPage({member,quests,onBack,onEdit}){
                   <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
                     background:`${p.color}15`,border:`1px solid ${p.color}25`,
                     display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
-                    {q.emoji||"⚔️"}
+                    {q.emoji||"⚔"}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
@@ -956,7 +956,7 @@ function MemberCard({member,quests,onEdit,onDelete,onClick}){
         {/* Quest stats */}
         <div style={{display:"flex",gap:10,marginBottom:member.note?4:0}}>
           <span style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
-            ⚔️ <strong style={{color:"rgba(255,255,255,0.6)"}}>{myQuests.length}</strong> quest{myQuests.length!==1?"s":""}
+            ⚔ <strong style={{color:"rgba(255,255,255,0.6)"}}>{myQuests.length}</strong> quest{myQuests.length!==1?"s":""}
           </span>
           {completed>0&&(
             <span style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
@@ -1276,7 +1276,7 @@ function DeleteConfirm({onConfirm,onCancel,label="quest"}){
         border:"1px solid rgba(255,255,255,0.09)",borderRadius:22,padding:"28px 24px",maxWidth:320,width:"100%",
         transform:visible?"scale(1) translateY(0)":"scale(0.94) translateY(8px)",
         transition:"transform 0.25s cubic-bezier(0.34,1.2,0.64,1)"}}>
-        <div style={{fontSize:36,marginBottom:12,textAlign:"center"}}>⚠️</div>
+        <div style={{fontSize:36,marginBottom:12,textAlign:"center"}}>⚠</div>
         <h3 style={{margin:"0 0 8px",fontSize:18,textAlign:"center",fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>Remove this {label}?</h3>
         <p style={{margin:"0 0 24px",fontSize:13.5,textAlign:"center",color:"rgba(255,255,255,0.3)",lineHeight:1.6,fontFamily:"'DM Sans',sans-serif"}}>This can't be undone.</p>
         <div style={{display:"flex",gap:10}}>
@@ -1315,7 +1315,7 @@ function BoardCard({ board, questCount, onClick }) {
         background:palette.grad,opacity:h?0.9:0.4,transition:"opacity 0.3s"}}/>
       <div style={{position:"absolute",top:-10,right:-10,width:80,height:80,borderRadius:"50%",
         background:`radial-gradient(circle,${palette.color}15 0%,transparent 70%)`,pointerEvents:"none"}}/>
-      <div style={{fontSize:28,marginBottom:10}}>🗺️</div>
+      <div style={{fontSize:28,marginBottom:10}}>🗺</div>
       <h3 style={{margin:"0 0 4px",fontSize:17,fontWeight:700,color:"#F2F2F2",
         fontFamily:"'Cormorant Garamond',serif",letterSpacing:"-0.01em"}}>{board.name}</h3>
       {board.description&&(
@@ -1324,7 +1324,7 @@ function BoardCard({ board, questCount, onClick }) {
       )}
       <div style={{display:"flex",alignItems:"center",gap:12}}>
         <span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
-          ⚔️ <strong style={{color:palette.color}}>{questCount}</strong> quest{questCount!==1?"s":""}
+          ⚔ <strong style={{color:palette.color}}>{questCount}</strong> quest{questCount!==1?"s":""}
         </span>
       </div>
     </div>
@@ -1535,7 +1535,7 @@ function JoinBoardScreen({ inviteCode, user, onJoined, onSkip }) {
             borderRadius:24,padding:"32px 24px",textAlign:"center"}}>
             <div style={{position:"relative",height:2,background:palette.grad,borderRadius:1,marginBottom:28,
               boxShadow:`0 0 12px ${palette.glow}`}}/>
-            <div style={{fontSize:48,marginBottom:16}}>🗺️</div>
+            <div style={{fontSize:48,marginBottom:16}}>🗺</div>
             <p style={{fontSize:12,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
               color:"rgba(255,255,255,0.3)",marginBottom:8,fontFamily:"'DM Sans',sans-serif"}}>
               You've been invited to
@@ -1646,7 +1646,7 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
         </div>
       ) : boardQuests.length===0 ? (
         <div style={{textAlign:"center",padding:"60px 0"}}>
-          <div style={{fontSize:40,marginBottom:14,opacity:0.15}}>🗺️</div>
+          <div style={{fontSize:40,marginBottom:14,opacity:0.15}}>🗺</div>
           <p style={{fontSize:15,color:"rgba(255,255,255,0.2)",lineHeight:1.7}}>No quests yet.<br/>Add the first one!</p>
         </div>
       ) : (
@@ -1757,7 +1757,7 @@ function AuthScreen({ onAuth }) {
 
         {/* Logo area */}
         <div style={{textAlign:"center",marginBottom:40}}>
-          <div style={{fontSize:42,marginBottom:12}}>⚔️</div>
+          <div style={{fontSize:42,marginBottom:12}}>⚔</div>
           <h1 style={{fontSize:32,fontWeight:700,letterSpacing:"-0.03em",
             fontFamily:"'Cormorant Garamond',serif",
             background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
@@ -2090,7 +2090,7 @@ export default function App(){
               </div>
             ):filtered.length===0?(
               <div style={{textAlign:"center",padding:"80px 0",animation:"cardIn 0.5s ease both"}}>
-                <div style={{fontSize:48,marginBottom:16,opacity:0.12}}>⚔️</div>
+                <div style={{fontSize:48,marginBottom:16,opacity:0.12}}>⚔</div>
                 <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7}}>{filter==="All"?"No quests yet.\nBegin your journey.":`No ${filter} quests.`}</p>
               </div>
             ):(
@@ -2125,7 +2125,7 @@ export default function App(){
             </div>
             {boards.length===0 ? (
               <div style={{textAlign:"center",padding:"60px 0",animation:"cardIn 0.5s ease both"}}>
-                <div style={{fontSize:48,marginBottom:16,opacity:0.15}}>🗺️</div>
+                <div style={{fontSize:48,marginBottom:16,opacity:0.15}}>🗺</div>
                 <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7,marginBottom:20}}>
                   No boards yet.<br/>Create one or join via an invite link.
                 </p>
