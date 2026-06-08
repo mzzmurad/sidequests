@@ -120,7 +120,7 @@ function MapView({ location, height = 200 }) {
   );
 }
 
-// ─── LOCATION SEARCH (Claude API geocoder — no CORS, works everywhere) ────────
+// ─── LOCATION SEARCH (corsproxy + Nominatim — free, no API key needed) ─────
 function LocationSearch({ value, onChange }) {
   const [query, setQuery]     = useState(value?.name || "");
   const [results, setResults] = useState([]);
@@ -137,35 +137,27 @@ function LocationSearch({ value, onChange }) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        // Use Claude API to resolve location — zero CORS issues, works from any browser
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 400,
-            system: `You are a geocoding assistant. Given a place name (usually in or near Azerbaijan), return a JSON array of up to 5 matching locations. Each item: {"name":"Short display name","full":"Full address","lat":number,"lng":number}. Only respond with the raw JSON array, nothing else. Bias results toward Azerbaijan.`,
-            messages: [{ role:"user", content: q }],
-          }),
-        });
+        const nominatim = `https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=en&q=${encodeURIComponent(q + " Azerbaijan")}`;
+        const url = `https://corsproxy.io/?url=${encodeURIComponent(nominatim)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("bad response");
         const data = await res.json();
-        const text = data.content?.[0]?.text || "[]";
-        const clean = text.replace(/```json|```/g, "").trim();
-        const parsed = JSON.parse(clean);
-        setResults(Array.isArray(parsed) ? parsed : []);
+        if (!Array.isArray(data)) throw new Error("bad format");
+        setResults(data);
         setOpen(true);
-        if (!parsed.length) setError("No results. Try a different name.");
+        if (data.length === 0) setError("No results found. Try a different name.");
       } catch {
         setError("Search failed. Please try again.");
         setResults([]);
       }
       setLoading(false);
-    }, 500);
+    }, 450);
   };
 
   const select = (r) => {
-    onChange({ name: r.name, lat: r.lat, lng: r.lng });
-    setQuery(r.name);
+    const name = r.display_name.split(",").slice(0, 2).join(", ");
+    onChange({ name, lat: parseFloat(r.lat), lng: parseFloat(r.lon) });
+    setQuery(name);
     setResults([]);
     setOpen(false);
     setError("");
@@ -232,11 +224,11 @@ function LocationSearch({ value, onChange }) {
               </div>
               <div>
                 <div style={{ fontSize:13.5, color:"#F0F0F0", fontFamily:"'DM Sans',sans-serif",
-                  fontWeight:600, lineHeight:1.3 }}>{r.name}</div>
-                {r.full && r.full !== r.name && (
-                  <div style={{ fontSize:11.5, color:"rgba(255,255,255,0.32)",
-                    fontFamily:"'DM Sans',sans-serif", marginTop:2 }}>{r.full}</div>
-                )}
+                  fontWeight:600, lineHeight:1.3 }}>{r.display_name.split(",").slice(0,2).join(", ")}</div>
+                <div style={{ fontSize:11.5, color:"rgba(255,255,255,0.32)",
+                  fontFamily:"'DM Sans',sans-serif", marginTop:2 }}>
+                  {r.display_name.split(",").slice(2,4).join(", ")}
+                </div>
               </div>
             </button>
           ))}
@@ -755,4 +747,3 @@ export default function App() {
     </div>
   );
 }
-
