@@ -180,7 +180,7 @@ const STATUS_META={
   Abandoned:{color:"#FF7878",glow:"rgba(255,120,120,0.25)",emoji:"✗"},
 };
 const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null};
-const EMPTY_MEMBER={id:null,name:"",role:"",note:"",created_at:null};
+const EMPTY_MEMBER={id:null,name:"",role:"",note:"",email:"",created_at:null};
 
 // ─── EMOJI PICKER DATA ────────────────────────────────────────────────────────
 const EMOJI_GROUPS={
@@ -748,6 +748,7 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
   const inviteeList=quest.invitees?quest.invitees.split(",").map(s=>s.trim()).filter(Boolean):[];
   const questMembers=members.filter(m=>inviteeList.map(n=>n.toLowerCase()).includes(m.name.toLowerCase()));
   const hasDetails=quest.description||inviteeList.length>0||quest.location?.name;
+  const isShared=!!quest.board_id;
 
   return(
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
@@ -815,6 +816,13 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
           </div>
         )}
         <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {isShared&&(
+            <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",
+              color:"rgba(120,193,255,0.8)",background:"rgba(120,193,255,0.1)",
+              border:"1px solid rgba(120,193,255,0.2)",padding:"2px 6px",borderRadius:4,flexShrink:0}}>
+              Shared
+            </span>
+          )}
           <StatusBadge status={quest.status}/>
           {hasDetails&&(
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:24,height:24,
@@ -947,7 +955,11 @@ function MemberCard({member,quests,onEdit,onDelete,onClick}){
         fontSize:26,boxShadow:`0 0 20px ${color}25,inset 0 0 12px ${color}10`}}>{avatar}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-          <h4 style={{margin:0,fontSize:15,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif"}}>{member.name}</h4>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <h4 style={{margin:0,fontSize:15,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif"}}>{member.name}</h4>
+                  {member.note==="Account owner"&&<span style={{fontSize:9,color:"#A8FF78",fontWeight:700,letterSpacing:"0.06em",background:"rgba(168,255,120,0.1)",border:"1px solid rgba(168,255,120,0.2)",padding:"1px 5px",borderRadius:4}}>YOU</span>}
+                </div>
+                {member.email&&<p style={{margin:"1px 0 0",fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>{member.email}</p>}
           <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color,
             background:`${color}15`,border:`1px solid ${color}30`,padding:"1px 6px",borderRadius:4,flexShrink:0}}>
             {member.role||title}
@@ -1875,18 +1887,54 @@ export default function App(){
     setUser(null);
   },[]);
 
-  const loadData = (userId) => {
+  const ensureUserMember = async(userId, email, existingMembers) => {
+    // Check if a member with this email already exists
+    const name = email.split("@")[0]; // use part before @ as display name
+    const alreadyExists = existingMembers.some(m =>
+      m.email === email || m.name.toLowerCase() === name.toLowerCase()
+    );
+    if(alreadyExists) return existingMembers;
+    // Create a member record linked to this account
+    const member = {
+      id: crypto.randomUUID(),
+      name,
+      email,
+      role: "",
+      note: "Account owner",
+      user_id: userId,
+      created_at: new Date().toISOString(),
+    };
+    try { await sb.upsert("members", member); } catch(e) { console.error(e); }
+    return [member, ...existingMembers];
+  };
+
+  const loadData = async(userId) => {
     setSyncing(true);
-    Promise.all([
-      sb.getAll("quests", userId),
-      sb.getAll("members", userId),
-      sb.getMyBoards(userId),
-    ]).then(([q,m,b])=>{
-      setQuests(Array.isArray(q)?q:[]);
-      setMembers(Array.isArray(m)?m:[]);
-      setBoards(Array.isArray(b)?b:[]);
+    try {
+      const [q,m,b] = await Promise.all([
+        sb.getAll("quests", userId),
+        sb.getAll("members", userId),
+        sb.getMyBoards(userId),
+      ]);
+      const questList = Array.isArray(q)?q:[];
+      const boardList = Array.isArray(b)?b:[];
+      // Also load board quests so shared tab works
+      const boardQuestLists = await Promise.all(
+        boardList.map(board=>sb.getBoardQuests(board.id).catch(()=>[]))
+      );
+      const boardQuests = boardQuestLists.flat();
+      const allQuests = [...questList, ...boardQuests.filter(bq=>!questList.find(pq=>pq.id===bq.id))];
+      setQuests(allQuests);
+      setBoards(boardList);
       setSyncing(false);
-    }).catch((e)=>{ console.error("loadData failed",e); setSyncing(false); });
+      // Ensure current user has a member profile
+      const memberList = Array.isArray(m)?m:[];
+      const updatedMembers = await ensureUserMember(userId, sb.getUser()?.email||"", memberList);
+      setMembers(updatedMembers);
+    } catch(e) {
+      console.error("loadData failed",e);
+      setSyncing(false);
+    }
   };
 
   const handleAuth = (u) => {
@@ -1954,9 +2002,13 @@ export default function App(){
     window.history.replaceState({}, "", window.location.pathname);
   };
 
-  const filtered=filter==="All"?quests.filter(q=>!q.board_id):quests.filter(q=>!q.board_id&&q.status===filter);
+  const [questScope, setQuestScope] = useState("personal"); // "personal" | "shared"
   const personalQuests = quests.filter(q=>!q.board_id);
-  const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:personalQuests.filter(q=>q.status===s).length}),{});
+  // Shared quests = quests that belong to any board the user is in
+  const sharedQuests = quests.filter(q=>!!q.board_id);
+  const scopedQuests = questScope==="personal" ? personalQuests : sharedQuests;
+  const filtered = filter==="All" ? scopedQuests : scopedQuests.filter(q=>q.status===filter);
+  const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:scopedQuests.filter(q=>q.status===s).length}),{});
   const completedCount=personalQuests.filter(q=>q.status==="Completed").length;
 
   const TABS=[
@@ -2058,21 +2110,43 @@ export default function App(){
             ))}
           </div>
           {tab==="quests"&&(
-            <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:2,paddingTop:14}}>
-              {["All",...STATUSES].map(s=>{
-                const active=filter===s;
-                const count=s==="All"?quests.length:counts[s];
-                const color=s==="All"?"#F0F0F0":STATUS_META[s]?.color;
-                const glow=s!=="All"?STATUS_META[s]?.glow:null;
-                return<button key={s} onClick={()=>setFilter(s)} style={{
-                  flexShrink:0,padding:"5px 13px",borderRadius:20,fontSize:11.5,fontWeight:600,
-                  cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
-                  border:`1px solid ${active?color:"rgba(255,255,255,0.09)"}`,
-                  background:active?`${color}15`:"transparent",color:active?color:"rgba(255,255,255,0.3)",
-                  boxShadow:active&&glow?`0 0 14px ${glow}`:"none",transform:active?"scale(1.04)":"scale(1)",
-                  transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",marginBottom:14,
-                }}>{s}{count>0&&<span style={{opacity:0.5,marginLeft:5,fontSize:10}}>{count}</span>}</button>;
-              })}
+            <div style={{paddingTop:14,paddingBottom:2}}>
+              {/* Personal / Shared scope toggle */}
+              <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:12,padding:3,gap:3,marginBottom:10}}>
+                {[
+                  {id:"personal",label:"Personal",count:personalQuests.length},
+                  {id:"shared",  label:"Shared",  count:sharedQuests.length},
+                ].map(s=>(
+                  <button key={s.id} onClick={()=>{setQuestScope(s.id);setFilter("All");}} style={{
+                    flex:1, padding:"7px 12px", borderRadius:9, border:"none", cursor:"pointer",
+                    background:questScope===s.id?"rgba(255,255,255,0.1)":"transparent",
+                    color:questScope===s.id?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.3)",
+                    fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
+                    transition:"all 0.2s", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                  }}>
+                    {s.label}
+                    <span style={{fontSize:10,opacity:0.5,background:"rgba(255,255,255,0.08)",
+                      padding:"1px 6px",borderRadius:8}}>{s.count}</span>
+                  </button>
+                ))}
+              </div>
+              {/* Status filter pills */}
+              <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:2}}>
+                {["All",...STATUSES].map(s=>{
+                  const active=filter===s;
+                  const count=s==="All"?scopedQuests.length:counts[s];
+                  const color=s==="All"?"#F0F0F0":STATUS_META[s]?.color;
+                  const glow=s!=="All"?STATUS_META[s]?.glow:null;
+                  return<button key={s} onClick={()=>setFilter(s)} style={{
+                    flexShrink:0,padding:"5px 13px",borderRadius:20,fontSize:11.5,fontWeight:600,
+                    cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+                    border:`1px solid ${active?color:"rgba(255,255,255,0.09)"}`,
+                    background:active?`${color}15`:"transparent",color:active?color:"rgba(255,255,255,0.3)",
+                    boxShadow:active&&glow?`0 0 14px ${glow}`:"none",transform:active?"scale(1.04)":"scale(1)",
+                    transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",marginBottom:14,
+                  }}>{s}{count>0&&<span style={{opacity:0.5,marginLeft:5,fontSize:10}}>{count}</span>}</button>;
+                })}
+              </div>
             </div>
           )}
           {tab!=="quests"&&<div style={{height:14}}/>}
