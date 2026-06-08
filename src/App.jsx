@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, createPortal } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://fbldconclzuckyotxvsk.supabase.co";
