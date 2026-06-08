@@ -67,7 +67,7 @@ const STATUS_META={
   "On Hold":{color:"#FFD478",glow:"rgba(255,212,120,0.25)",emoji:"⏸"},
   Abandoned:{color:"#FF7878",glow:"rgba(255,120,120,0.25)",emoji:"✗"},
 };
-const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null};
+const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null};
 const EMPTY_MEMBER={id:null,name:"",role:"",note:"",created_at:null};
 
 // ─── EMOJI PICKER DATA ────────────────────────────────────────────────────────
@@ -343,12 +343,17 @@ function StreakCalendar({quests}){
   const daysInMonth=new Date(year,month+1,0).getDate();
   const today=new Date();
 
-  // Build set of completed dates from quests
+  // Build sets of dates from quests
   const fireDates=new Set();
+  const startDates=new Set();
   quests.forEach(q=>{
     if(q.status==="Completed"&&q.completed_at){
       const d=new Date(q.completed_at);
       fireDates.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+    }
+    if(q.started_at){
+      const d=new Date(q.started_at);
+      startDates.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
     }
   });
 
@@ -356,6 +361,7 @@ function StreakCalendar({quests}){
   const nextMonth=()=>setViewDate(new Date(year,month+1,1));
   const isToday=(d)=>today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
   const hasFire=(d)=>fireDates.has(`${year}-${month}-${d}`);
+  const hasStart=(d)=>startDates.has(`${year}-${month}-${d}`);
 
   const completedThisMonth=quests.filter(q=>{
     if(q.status!=="Completed"||!q.completed_at) return false;
@@ -402,13 +408,14 @@ function StreakCalendar({quests}){
         {Array.from({length:daysInMonth}).map((_,i)=>{
           const d=i+1;
           const fire=hasFire(d);
+          const start=hasStart(d);
           const tod=isToday(d);
           return(
             <div key={d} style={{
               aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",
               borderRadius:8,position:"relative",
-              background:fire?"rgba(251,191,36,0.12)":tod?"rgba(255,255,255,0.06)":"transparent",
-              border:tod?`1px solid rgba(255,255,255,0.2)`:fire?"1px solid rgba(251,191,36,0.25)":"1px solid transparent",
+              background:fire?"rgba(251,191,36,0.12)":start?"rgba(168,255,120,0.08)":tod?"rgba(255,255,255,0.06)":"transparent",
+              border:fire?"1px solid rgba(251,191,36,0.25)":start?"1px solid rgba(168,255,120,0.2)":tod?"1px solid rgba(255,255,255,0.2)":"1px solid transparent",
               transition:"all 0.15s",
             }}>
               {fire?(
@@ -423,9 +430,10 @@ function StreakCalendar({quests}){
       </div>
 
       {/* Legend */}
-      <div style={{marginTop:12,display:"flex",alignItems:"center",gap:6,
+      <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:4,
         fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>
-        <span>🔥</span> = quest completed on that day
+        <div style={{display:"flex",alignItems:"center",gap:6}}><span>🔥</span> quest completed</div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}><span>⚔️</span> quest started</div>
       </div>
     </div>
   );
@@ -662,12 +670,23 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
         <div style={{flex:1,minWidth:0}}>
           <h3 style={{margin:0,fontSize:16,fontWeight:700,letterSpacing:"-0.02em",color:"#F2F2F2",lineHeight:1.3,
             whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'Cormorant Garamond',serif"}}>{quest.title}</h3>
-          {!expanded&&(quest.description||quest.location?.name)&&(
+          {!expanded&&(quest.description||quest.location?.name||quest.due_date)&&(
             <p style={{margin:"3px 0 0",fontSize:12,color:"rgba(255,255,255,0.3)",whiteSpace:"nowrap",
               overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'DM Sans',sans-serif"}}>
               {quest.location?.name?`📍 ${quest.location.name}`:quest.description?.slice(0,60)+(quest.description?.length>60?"…":"")}
             </p>
           )}
+          {!expanded&&quest.due_date&&quest.status!=="Completed"&&(()=>{
+            const days=Math.ceil((new Date(quest.due_date)-new Date())/(1000*60*60*24));
+            const overdue=days<0;
+            const soon=days<=3&&days>=0;
+            return(
+              <span style={{fontSize:11,fontWeight:700,color:overdue?"#FF7878":soon?"#FFD478":"rgba(255,255,255,0.35)",
+                fontFamily:"'DM Sans',sans-serif",marginTop:2,display:"block"}}>
+                {overdue?`⚠ ${Math.abs(days)}d overdue`:days===0?"⚡ Due today":`🗓 ${days}d left`}
+              </span>
+            );
+          })()}
         </div>
         {!expanded&&inviteeList.length>0&&(
           <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
@@ -738,11 +757,48 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
               </div>
             </div>
           )}
-          {quest.created_at&&(
-            <p style={{margin:0,fontSize:10.5,color:"rgba(255,255,255,0.18)",fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.04em"}}>
-              Created {new Date(quest.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
-              {quest.completed_at&&` · Completed ${new Date(quest.completed_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}`}
-            </p>
+          {(quest.created_at||quest.started_at||quest.due_date||quest.completed_at)&&(
+            <div style={{display:"flex",flexDirection:"column",gap:4,padding:"12px 14px",borderRadius:12,
+              background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.05)"}}>
+              {quest.created_at&&(
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>Created</span>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>
+                    {new Date(quest.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                  </span>
+                </div>
+              )}
+              {quest.started_at&&(
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>Started</span>
+                  <span style={{fontSize:11,color:"rgba(168,255,120,0.7)",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>
+                    {new Date(quest.started_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                  </span>
+                </div>
+              )}
+              {quest.due_date&&quest.status!=="Completed"&&(()=>{
+                const days=Math.ceil((new Date(quest.due_date)-new Date())/(1000*60*60*24));
+                const overdue=days<0;
+                return(
+                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                    <span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>Due</span>
+                    <span style={{fontSize:11,fontWeight:600,fontFamily:"'DM Sans',sans-serif",
+                      color:overdue?"#FF7878":days<=3?"#FFD478":"rgba(255,212,120,0.7)"}}>
+                      {new Date(quest.due_date).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                      {" "}{overdue?`(${Math.abs(days)}d overdue)`:days===0?"(today)":days<=3?`(${days}d left)`:""}
+                    </span>
+                  </div>
+                );
+              })()}
+              {quest.completed_at&&(
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>🔥 Completed</span>
+                  <span style={{fontSize:11,color:"#78C1FF",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
+                    {new Date(quest.completed_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -823,7 +879,8 @@ function QuestModal({quest,onSave,onClose}){
     const now=new Date().toISOString();
     const wasCompleted=quest?.status==="Completed";
     const nowCompleted=form.status==="Completed";
-    const completed_at=(nowCompleted&&!wasCompleted)?now:(form.completed_at||null);
+    // Use manual date if set, auto-set if newly completed, else keep existing
+    const completed_at=form.completed_at||(nowCompleted&&!wasCompleted?now:null);
     await onSave({...form,id:form.id||crypto.randomUUID(),created_at:form.created_at||now,completed_at});
     setSaving(false);
   };
@@ -927,6 +984,47 @@ function QuestModal({quest,onSave,onClose}){
                 disabled={form.status!=="Completed"} onChange={handlePhoto}/>
             </label>
           )}
+        </div>
+        {/* Date fields */}
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <label style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.3)",display:"block",fontFamily:"'DM Sans',sans-serif",marginBottom:-6}}>
+            Dates
+          </label>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <label style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",
+                marginBottom:5,display:"block"}}>Started</label>
+              <input type="date" value={form.started_at?form.started_at.slice(0,10):""}
+                onChange={e=>set("started_at",e.target.value?new Date(e.target.value).toISOString():null)}
+                style={{...inp,padding:"10px 12px",fontSize:13,colorScheme:"dark"}}
+                onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.22)"}
+                onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.09)"}/>
+            </div>
+            <div>
+              <label style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",
+                marginBottom:5,display:"block"}}>Due date</label>
+              <input type="date" value={form.due_date?form.due_date.slice(0,10):""}
+                onChange={e=>set("due_date",e.target.value?new Date(e.target.value).toISOString():null)}
+                style={{...inp,padding:"10px 12px",fontSize:13,colorScheme:"dark"}}
+                onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.22)"}
+                onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.09)"}/>
+            </div>
+          </div>
+          {/* Manual completion date — always editable */}
+          <div>
+            <label style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",
+              marginBottom:5,display:"block"}}>🔥 Completion date</label>
+            <input type="date" value={form.completed_at?form.completed_at.slice(0,10):""}
+              onChange={e=>set("completed_at",e.target.value?new Date(e.target.value).toISOString():null)}
+              style={{...inp,padding:"10px 12px",fontSize:13,colorScheme:"dark",
+                borderColor:form.completed_at?"rgba(120,193,255,0.3)":"rgba(255,255,255,0.09)"}}
+              onFocus={e=>e.target.style.borderColor="rgba(120,193,255,0.5)"}
+              onBlur={e=>e.target.style.borderColor=form.completed_at?"rgba(120,193,255,0.3)":"rgba(255,255,255,0.09)"}/>
+            <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"5px 0 0",fontFamily:"'DM Sans',sans-serif"}}>
+              Set this to mark a past completion on the streak calendar.
+            </p>
+          </div>
         </div>
         <button onClick={handleSave} disabled={!form.title.trim()||saving} style={{
           background:form.title.trim()?"linear-gradient(135deg,#e8e8e8,#ffffff)":"rgba(255,255,255,0.08)",
