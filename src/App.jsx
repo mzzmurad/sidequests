@@ -82,9 +82,11 @@ const sb = {
   },
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  async getAll(table, filter="") {
+  async getAll(table, userId="") {
+    const filter = userId ? `&user_id=eq.${userId}` : "";
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?order=created_at.desc${filter}`,{headers:this.h});
-    if(!r.ok) throw new Error(); return r.json();
+    if(!r.ok) { console.error("getAll failed", table, r.status); return []; }
+    return r.json();
   },
   async upsert(table,obj) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{
@@ -1442,20 +1444,20 @@ export default function App(){
 
   const loadData = (userId) => {
     setSyncing(true);
-    const filter = `&user_id=eq.${userId}`;
     Promise.all([
-      sb.getAll("quests", filter),
-      sb.getAll("members", filter),
+      sb.getAll("quests", userId),
+      sb.getAll("members", userId),
     ]).then(([q,m])=>{
-      setQuests(q||[]);
-      setMembers(m||[]);
+      setQuests(Array.isArray(q)?q:[]);
+      setMembers(Array.isArray(m)?m:[]);
       setSyncing(false);
-    }).catch(()=>{ setSyncing(false); });
+    }).catch((e)=>{ console.error("loadData failed",e); setSyncing(false); });
   };
 
   const handleAuth = (u) => {
     setUser(u);
-    loadData(u.id);
+    // Small delay to ensure token is stored before fetching
+    setTimeout(()=>loadData(u.id), 100);
   };
 
   const handleSignOut = async () => {
@@ -1501,10 +1503,11 @@ export default function App(){
 
   // Auth gate
   if(user===undefined) return (
-    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
       <div style={{width:32,height:32,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.5)",
         borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+      <p style={{color:"rgba(255,255,255,0.3)",fontSize:13,fontFamily:"sans-serif"}}>Loading…</p>
     </div>
   );
   if(!user) return <AuthScreen onAuth={handleAuth}/>;
