@@ -178,7 +178,7 @@ const sb = {
 
   // ── Memories ─────────────────────────────────────────────────────────────
   async getMemories(userId) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&order=date.desc`, {headers:this.h});
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&order=date.desc,created_at.desc`, {headers:this.h});
     const d = await r.json(); return Array.isArray(d)?d:[];
   },
   async upsertMemory(memory) {
@@ -2448,14 +2448,14 @@ function MemoriesPage({ user }) {
     sb.getMemories(user.id).then(m=>{ setMemories(m); setLoading(false); }).catch(()=>setLoading(false));
   },[]);
 
-  const getMemory = (d) => {
+  const getDayMemories = (d) => {
     const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    return memories.find(m=>m.date===dateStr)||null;
+    return memories.filter(m=>m.date===dateStr);
   };
 
   const openDay = (d) => {
     const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    setSelected({date:dateStr, memory:getMemory(d)});
+    setSelected({date:dateStr, memories:getDayMemories(d)});
   };
 
   const isToday = (d) => today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
@@ -2505,7 +2505,9 @@ function MemoriesPage({ user }) {
           {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
           {Array.from({length:daysInMonth}).map((_,i)=>{
             const d = i+1;
-            const mem = getMemory(d);
+            const dayMems = getDayMemories(d);
+            const mem = dayMems[0]||null;
+            const memCount = dayMems.length;
             const tod = isToday(d);
             const fut = isFuture(d);
             return(
@@ -2527,8 +2529,12 @@ function MemoriesPage({ user }) {
                 <span style={{fontSize:12,color:mem?"rgba(255,255,255,0.9)":tod?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",
                   fontFamily:"'DM Sans',sans-serif",fontWeight:tod?700:400,
                   position:"relative",zIndex:1}}>{d}</span>
-                {mem&&<div style={{width:4,height:4,borderRadius:"50%",background:"#C084FC",
-                  position:"absolute",bottom:3,zIndex:1}}/>}
+                {memCount>0&&<div style={{position:"absolute",bottom:3,zIndex:1,
+                  display:"flex",gap:2,justifyContent:"center"}}>
+                  {Array.from({length:Math.min(memCount,3)}).map((_,i)=>(
+                    <div key={i} style={{width:3,height:3,borderRadius:"50%",background:"#C084FC"}}/>
+                  ))}
+                </div>}
               </button>
             );
           })}
@@ -2599,19 +2605,20 @@ function MemoriesPage({ user }) {
       {selected&&(
         <MemoryDayModal
           date={selected.date}
-          memory={selected.memory}
+          dayMemories={selected.memories||[]}
           userId={user.id}
           onSave={async(mem)=>{
             await sb.upsertMemory({...mem,user_id:user.id});
             const updated = await sb.getMemories(user.id);
             setMemories(updated);
-            setSelected(null);
+            // Keep modal open to allow adding more, just refresh
+            setSelected(s=>({...s,memories:updated.filter(m=>m.date===s.date)}));
           }}
           onDelete={async(id)=>{
             await sb.deleteMemory(id);
             const updated = await sb.getMemories(user.id);
             setMemories(updated);
-            setSelected(null);
+            setSelected(s=>({...s,memories:updated.filter(m=>m.date===s.date)}));
           }}
           onClose={()=>setSelected(null)}
         />
@@ -2621,41 +2628,16 @@ function MemoriesPage({ user }) {
 }
 
 // ─── MEMORY DAY MODAL ─────────────────────────────────────────────────────────
-function MemoryDayModal({ date, memory, userId, onSave, onDelete, onClose }) {
-  const [title, setTitle]   = useState(memory?.title||"");
-  const [note, setNote]     = useState(memory?.note||"");
-  const [photo, setPhoto]   = useState(memory?.photo||null);
-  const [emoji, setEmoji]   = useState(memory?.emoji||"");
-  const [saving, setSaving] = useState(false);
+function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClose }) {
+  const [view, setView]     = useState("list");
+  const [editing, setEditing] = useState(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
   const close=()=>{ setVisible(false); setTimeout(onClose,250); };
 
-  const handlePhoto=(e)=>{
-    const file=e.target.files?.[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=(ev)=>setPhoto(ev.target.result);
-    reader.readAsDataURL(file);
-  };
-
-  const save = async() => {
-    setSaving(true);
-    try {
-      await onSave({
-        id: memory?.id||crypto.randomUUID(),
-        date, title:title.trim()||date,
-        note:note.trim(), photo, emoji,
-        created_at: memory?.created_at||new Date().toISOString(),
-      });
-    } catch(e){console.error(e);}
-    setSaving(false);
-  };
-
   const displayDate = new Date(date+"T00:00:00").toLocaleDateString("en-US",
     {weekday:"long",month:"long",day:"numeric",year:"numeric"});
-
-  const QUICK_EMOJI = ["😊","🥳","😔","🌟","❤","🔥","🌙","✈","🍕","🎵","💪","🤝","🌿","🏖","🎉"];
 
   return createPortal(
     <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.75:0})`,
@@ -2670,15 +2652,21 @@ function MemoryDayModal({ date, memory, userId, onSave, onDelete, onClose }) {
         transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
         maxHeight:"85vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0",flexShrink:0}}/>
-
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
+            {(view==="add"||view==="edit")&&(
+              <button onClick={()=>setView("list")} style={{background:"none",border:"none",
+                cursor:"pointer",color:"rgba(255,255,255,0.4)",fontSize:12,
+                fontFamily:"'DM Sans',sans-serif",padding:"0 0 4px",display:"flex",alignItems:"center",gap:4}}>
+                <Icon d={Icons.back} size={13}/> Back
+              </button>
+            )}
+            <h2 style={{margin:0,fontSize:17,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
               {displayDate}
             </h2>
-            {memory&&<p style={{margin:"2px 0 0",fontSize:11,color:"rgba(192,132,252,0.7)",fontFamily:"'DM Sans',sans-serif"}}>
-              Editing memory
-            </p>}
+            <p style={{margin:"2px 0 0",fontSize:11,color:"rgba(192,132,252,0.6)",fontFamily:"'DM Sans',sans-serif"}}>
+              {dayMemories.length} moment{dayMemories.length!==1?"s":""}
+            </p>
           </div>
           <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
             borderRadius:10,padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
@@ -2686,90 +2674,98 @@ function MemoryDayModal({ date, memory, userId, onSave, onDelete, onClose }) {
           </button>
         </div>
 
-        {/* Quick emoji */}
-        <div>
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
-            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:8}}>Vibe</p>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {QUICK_EMOJI.map(e=>(
-              <button key={e} onClick={()=>setEmoji(emoji===e?"":e)} style={{
-                fontSize:20,padding:"6px",borderRadius:8,border:"none",cursor:"pointer",
-                background:emoji===e?"rgba(192,132,252,0.2)":"rgba(255,255,255,0.04)",
-                outline:emoji===e?"1px solid rgba(192,132,252,0.5)":"none",transition:"all 0.1s"}}>
-                {e}
-              </button>
+        {view==="list"&&(
+          <>
+            {dayMemories.length===0&&(
+              <div style={{textAlign:"center",padding:"20px 0",color:"rgba(255,255,255,0.2)",
+                fontSize:14,fontFamily:"'DM Sans',sans-serif"}}>No moments yet. Add your first!</div>
+            )}
+            {dayMemories.map(m=>(
+              <div key={m.id} style={{background:"rgba(192,132,252,0.06)",
+                border:"1px solid rgba(192,132,252,0.15)",borderRadius:14,overflow:"hidden"}}>
+                {m.photo&&<img src={m.photo} alt="" style={{width:"100%",height:140,objectFit:"cover",display:"block"}}/>}
+                <div style={{padding:"12px 14px",display:"flex",alignItems:"flex-start",gap:10}}>
+                  {m.emoji&&<span style={{fontSize:20,flexShrink:0}}>{m.emoji}</span>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",fontFamily:"'Cormorant Garamond',serif"}}>{m.title||"Moment"}</div>
+                    {m.note&&<div style={{fontSize:12.5,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",marginTop:3,lineHeight:1.5}}>{m.note}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <button onClick={()=>{setEditing(m);setView("edit");}} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:7,padding:"5px 7px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+                      <Icon d={Icons.edit} size={13}/>
+                    </button>
+                    <button onClick={()=>onDelete(m.id)} style={{background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",borderRadius:7,padding:"5px 7px",cursor:"pointer",color:"rgba(255,120,120,0.6)"}}>
+                      <Icon d={Icons.trash} size={13}/>
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
-          </div>
-        </div>
-
-        {/* Title */}
-        <div>
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
-            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Title</p>
-          <input value={title} onChange={e=>setTitle(e.target.value)}
-            placeholder="What happened today?"
-            style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-              borderRadius:12,padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
-              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"}}/>
-        </div>
-
-        {/* Note */}
-        <div>
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
-            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Note</p>
-          <textarea value={note} onChange={e=>setNote(e.target.value)}
-            placeholder="A few words about this day…" rows={3}
-            style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-              borderRadius:12,padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
-              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",resize:"vertical",lineHeight:1.6}}/>
-        </div>
-
-        {/* Photo */}
-        <div>
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
-            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Photo</p>
-          {photo?(
-            <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
-              <img src={photo} alt="" style={{width:"100%",display:"block",maxHeight:180,objectFit:"cover"}}/>
-              <button onClick={()=>setPhoto(null)} style={{position:"absolute",top:8,right:8,
-                background:"rgba(0,0,0,0.7)",border:"1px solid rgba(255,255,255,0.2)",
-                borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"rgba(255,255,255,0.8)",fontSize:12}}>
-                Remove
-              </button>
-            </div>
-          ):(
-            <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:12,
-              cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px dashed rgba(255,255,255,0.12)"}}>
-              <Icon d={Icons.camera} size={16} stroke="rgba(255,255,255,0.4)"/>
-              <span style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
-                Add a photo from this day
-              </span>
-              <input type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
-            </label>
-          )}
-        </div>
-
-        {/* Buttons */}
-        <div style={{display:"flex",gap:10}}>
-          {memory&&(
-            <button onClick={()=>onDelete(memory.id)} style={{padding:"14px",borderRadius:12,
-              background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",
-              color:"#FF7878",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
-              Delete
+            <button onClick={()=>{setEditing(null);setView("add");}} style={{
+              display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",
+              borderRadius:14,border:"1px dashed rgba(192,132,252,0.3)",
+              background:"rgba(192,132,252,0.06)",color:"rgba(192,132,252,0.8)",
+              cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+              <Icon d={Icons.plus} size={15} stroke="currentColor"/> Add Moment
             </button>
-          )}
-          <button onClick={save} disabled={saving} style={{flex:1,padding:"14px",borderRadius:12,
-            background:"linear-gradient(135deg,#C084FC,#818CF8)",
-            color:"#fff",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,
-            fontFamily:"'DM Sans',sans-serif",opacity:saving?0.7:1}}>
-            {saving?"Saving…":memory?"Update Memory":"Save Memory"}
-          </button>
-        </div>
+          </>
+        )}
+
+        {(view==="add"||view==="edit")&&(
+          <MemoryForm
+            initial={view==="edit"?editing:null}
+            date={date}
+            onSave={async(mem)=>{ await onSave(mem); setView("list"); }}
+          />
+        )}
       </div>
     </div>,
     document.body
   );
 }
+
+// ─── MEMORY FORM ─────────────────────────────────────────────────────────────
+function MemoryForm({ initial, date, onSave }) {
+  const [title,setTitle] = useState(initial?.title||"");
+  const [note,setNote]   = useState(initial?.note||"");
+  const [photo,setPhoto] = useState(initial?.photo||null);
+  const [emoji,setEmoji] = useState(initial?.emoji||"");
+  const [saving,setSaving] = useState(false);
+  const QUICK = ["😊","🥳","😔","🌟","❤","🔥","🌙","✈","🍕","🎵","💪","🤝","🌿","🎉","🫂"];
+  const handlePhoto=(e)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>setPhoto(ev.target.result);r.readAsDataURL(f);};
+  const inp={width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"};
+  const lbl={fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7,display:"block"};
+  const save=async()=>{setSaving(true);await onSave({id:initial?.id||crypto.randomUUID(),date,title:title.trim()||"Moment",note:note.trim(),photo,emoji,created_at:initial?.created_at||new Date().toISOString()});setSaving(false);};
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div><label style={lbl}>Vibe</label>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {QUICK.map(e=><button key={e} onClick={()=>setEmoji(emoji===e?"":e)} style={{fontSize:20,padding:"6px",borderRadius:8,border:"none",cursor:"pointer",background:emoji===e?"rgba(192,132,252,0.2)":"rgba(255,255,255,0.04)",outline:emoji===e?"1px solid rgba(192,132,252,0.5)":"none",transition:"all 0.1s"}}>{e}</button>)}
+        </div>
+      </div>
+      <div><label style={lbl}>Title</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="What happened?" style={inp}/></div>
+      <div><label style={lbl}>Note</label><textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="A few words…" rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
+      <div><label style={lbl}>Photo</label>
+        {photo?(
+          <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
+            <img src={photo} alt="" style={{width:"100%",display:"block",maxHeight:160,objectFit:"cover"}}/>
+            <button onClick={()=>setPhoto(null)} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.7)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"#fff",fontSize:12}}>Remove</button>
+          </div>
+        ):(
+          <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:12,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px dashed rgba(255,255,255,0.12)"}}>
+            <Icon d={Icons.camera} size={16} stroke="rgba(255,255,255,0.4)"/>
+            <span style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>Add photo</span>
+            <input type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
+          </label>
+        )}
+      </div>
+      <button onClick={save} disabled={saving} style={{padding:"14px",borderRadius:12,background:"linear-gradient(135deg,#C084FC,#818CF8)",color:"#fff",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,fontFamily:"'DM Sans',sans-serif",opacity:saving?0.7:1}}>
+        {saving?"Saving…":initial?"Update Moment":"Save Moment"}
+      </button>
+    </div>
+  );
+}
+
 
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
