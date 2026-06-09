@@ -82,6 +82,59 @@ const sb = {
     } catch { return null; }
   },
 
+  // ── Friends ───────────────────────────────────────────────────────────────
+  async sendFriendRequest(fromId, toEmail) {
+    // First find user by email via members table
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/members?email=eq.${encodeURIComponent(toEmail)}&select=user_id,name,email&limit=1`, {headers:this.h});
+    const d = await r.json();
+    const target = Array.isArray(d) ? d[0] : null;
+    if(!target?.user_id) throw new Error("No user found with that email");
+    if(target.user_id === fromId) throw new Error("You can't add yourself");
+    // Check existing
+    const check = await fetch(`${SUPABASE_URL}/rest/v1/friendships?or=(and(from_id.eq.${fromId},to_id.eq.${target.user_id}),and(from_id.eq.${target.user_id},to_id.eq.${fromId}))`, {headers:this.h});
+    const existing = await check.json();
+    if(Array.isArray(existing) && existing.length > 0) throw new Error("Already friends or request pending");
+    await fetch(`${SUPABASE_URL}/rest/v1/friendships`, {
+      method:"POST", headers:{...this.h,"Prefer":"return=minimal"},
+      body:JSON.stringify({id:crypto.randomUUID(),from_id:fromId,to_id:target.user_id,status:"pending",created_at:new Date().toISOString()})
+    });
+    return target;
+  },
+  async getFriendships(userId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/friendships?or=(from_id.eq.${userId},to_id.eq.${userId})`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+  async respondFriendRequest(id, accept) {
+    const status = accept ? "accepted" : "declined";
+    await fetch(`${SUPABASE_URL}/rest/v1/friendships?id=eq.${id}`, {
+      method:"PATCH", headers:{...this.h,"Prefer":"return=minimal"},
+      body:JSON.stringify({status})
+    });
+  },
+  async getFriendProfiles(userId) {
+    // Get all accepted friendships and their member profiles
+    const ships = await this.getFriendships(userId);
+    const accepted = ships.filter(s=>s.status==="accepted");
+    if(accepted.length===0) return {friends:[], pending:[], incoming:[]};
+    const friendIds = accepted.map(s=>s.from_id===userId?s.to_id:s.from_id);
+    let friends = [];
+    if(friendIds.length>0) {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/members?user_id=in.(${friendIds.join(",")})`, {headers:this.h});
+      friends = await r.json();
+    }
+    const pending  = ships.filter(s=>s.status==="pending"&&s.from_id===userId);
+    const incoming = ships.filter(s=>s.status==="pending"&&s.to_id===userId);
+    // Get incoming requester profiles
+    let incomingProfiles = [];
+    if(incoming.length>0) {
+      const ids = incoming.map(s=>s.from_id);
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/members?user_id=in.(${ids.join(",")})`, {headers:this.h});
+      const profiles = await r.json();
+      incomingProfiles = incoming.map(s=>({...s, profile: profiles.find(p=>p.user_id===s.from_id)}));
+    }
+    return {friends:Array.isArray(friends)?friends:[], pending, incoming:incomingProfiles};
+  },
+
   // ── Boards ────────────────────────────────────────────────────────────────
   async getMyBoards(userId) {
     // Get boards where user is creator or member
@@ -182,6 +235,33 @@ const STATUS_META={
 };
 const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null};
 const EMPTY_MEMBER={id:null,name:"",role:"",note:"",email:"",created_at:null};
+
+// ─── XP + RANK SYSTEM ────────────────────────────────────────────────────────
+const RANKS = [
+  { name:"Wanderer",   min:0,    max:99,   icon:"🌱", color:"#A0A0A0" },
+  { name:"Apprentice", min:100,  max:299,  icon:"⚔",  color:"#78C1FF" },
+  { name:"Squire",     min:300,  max:599,  icon:"🛡",  color:"#A8FF78" },
+  { name:"Knight",     min:600,  max:999,  icon:"🗡",  color:"#FBBF24" },
+  { name:"Champion",   min:1000, max:1999, icon:"👑",  color:"#F472B6" },
+  { name:"Legend",     min:2000, max:9999, icon:"🔥",  color:"#E879F9" },
+];
+
+const XP_VALUES = {
+  Active:    10,  // just creating an active quest
+  Completed: 50,  // completing a quest
+  Hard:      25,  // bonus for hard quests (future)
+};
+
+const getRank = (xp) => RANKS.slice().reverse().find(r => xp >= r.min) || RANKS[0];
+
+const calcXP = (quests) => {
+  let xp = 0;
+  quests.forEach(q => {
+    xp += XP_VALUES.Active; // 10 XP per quest created
+    if(q.status === "Completed") xp += XP_VALUES.Completed; // +50 on complete
+  });
+  return xp;
+};
 
 // ─── EMOJI PICKER DATA ────────────────────────────────────────────────────────
 const EMOJI_GROUPS={
@@ -786,7 +866,9 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
           animation:quest.status==="Active"?"pulseDot 2s ease-in-out infinite":"none"}}/>
         <div style={{flex:1,minWidth:0}}>
           <h3 style={{margin:0,fontSize:16,fontWeight:700,letterSpacing:"-0.02em",color:"#F2F2F2",lineHeight:1.3,
-            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'Cormorant Garamond',serif"}}>{quest.title}</h3>
+            fontFamily:"'Cormorant Garamond',serif",
+            display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",
+            overflow:"hidden",wordBreak:"break-word"}}>{quest.title}</h3>
           {!expanded&&(quest.description||quest.location?.name||quest.due_date)&&(
             <p style={{margin:"3px 0 0",fontSize:12,color:"rgba(255,255,255,0.3)",whiteSpace:"nowrap",
               overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'DM Sans',sans-serif"}}>
@@ -1098,9 +1180,13 @@ function QuestModal({quest,onSave,onClose}){
         </div>
         <div><label style={lbl}>Invite People</label>
           <input value={form.invitees} onChange={e=>set("invitees",e.target.value)}
-            placeholder="Alice, Bob, Charlie (comma separated)" style={inp}
+            placeholder="Friend names (comma separated)" style={inp}
             onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.22)"}
             onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.09)"}/>
+          <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"5px 0 0",
+            fontFamily:"'DM Sans',sans-serif"}}>
+            Only friends can be invited. Add friends in the Friends tab first.
+          </p>
         </div>
         {/* Photo upload — shown when status is Completed */}
         <div>
@@ -1721,6 +1807,241 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
   );
 }
 
+
+// ─── RANK BADGE ───────────────────────────────────────────────────────────────
+function RankBadge({ xp, size="sm" }) {
+  const rank = getRank(xp);
+  const next = RANKS.find(r=>r.min > xp);
+  const pct  = next ? Math.round(((xp - getRank(xp).min) / (next.min - getRank(xp).min)) * 100) : 100;
+  if(size==="sm") return (
+    <div style={{display:"flex",alignItems:"center",gap:5}}>
+      <span style={{fontSize:14}}>{rank.icon}</span>
+      <span style={{fontSize:11,fontWeight:700,color:rank.color,fontFamily:"'DM Sans',sans-serif",
+        letterSpacing:"0.04em"}}>{rank.name}</span>
+      <span style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>
+        {xp} XP
+      </span>
+    </div>
+  );
+  // Large version for profile
+  return (
+    <div style={{background:`${rank.color}10`,border:`1px solid ${rank.color}30`,
+      borderRadius:16,padding:"16px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+        <span style={{fontSize:36}}>{rank.icon}</span>
+        <div>
+          <div style={{fontSize:20,fontWeight:700,color:rank.color,
+            fontFamily:"'Cormorant Garamond',serif"}}>{rank.name}</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
+            {xp} XP total
+          </div>
+        </div>
+        {next&&<div style={{marginLeft:"auto",textAlign:"right"}}>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Next rank</div>
+          <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.6)",fontFamily:"'DM Sans',sans-serif"}}>{next.name}</div>
+        </div>}
+      </div>
+      {next&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+            <span style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>PROGRESS</span>
+            <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>{pct}%</span>
+          </div>
+          <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:2}}>
+            <div style={{height:"100%",borderRadius:2,width:`${pct}%`,
+              background:`linear-gradient(90deg,${rank.color}80,${rank.color})`,
+              transition:"width 0.8s cubic-bezier(0.34,1.2,0.64,1)",
+              boxShadow:`0 0 8px ${rank.color}60`}}/>
+          </div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",marginTop:5}}>
+            {next.min - xp} XP to {next.name}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── FRIENDS PAGE ─────────────────────────────────────────────────────────────
+function FriendsPage({ user, quests, onAddToQuest }) {
+  const [friends, setFriends]   = useState([]);
+  const [pending, setPending]   = useState([]);
+  const [incoming, setIncoming] = useState([]);
+  const [email, setEmail]       = useState("");
+  const [loading, setLoading]   = useState(true);
+  const [sending, setSending]   = useState(false);
+  const [error, setError]       = useState("");
+  const [success, setSuccess]   = useState("");
+  const userXP = calcXP(quests);
+
+  const load = async() => {
+    setLoading(true);
+    try {
+      const data = await sb.getFriendProfiles(user.id);
+      setFriends(data.friends||[]);
+      setPending(data.pending||[]);
+      setIncoming(data.incoming||[]);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  const sendRequest = async() => {
+    if(!email.trim()) return;
+    setSending(true); setError(""); setSuccess("");
+    try {
+      const target = await sb.sendFriendRequest(user.id, email.trim());
+      setSuccess(`Friend request sent to ${target.name||email}!`);
+      setEmail("");
+    } catch(e) { setError(e.message); }
+    setSending(false);
+  };
+
+  const respond = async(id, accept) => {
+    try {
+      await sb.respondFriendRequest(id, accept);
+      load();
+    } catch(e) { console.error(e); }
+  };
+
+  return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 0"}}>
+      <div style={{marginBottom:20}}>
+        <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+          color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Adventure</p>
+        <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+          background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:16}}>
+          Friends & Rank
+        </h2>
+        {/* Rank card */}
+        <RankBadge xp={userXP} size="lg"/>
+      </div>
+
+      {/* Incoming requests */}
+      {incoming.length>0&&(
+        <div style={{marginBottom:20}}>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"#FFD478",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+            Incoming Requests ({incoming.length})
+          </p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {incoming.map(req=>{
+              const {avatar,color}=getCharacter(req.profile?.name||"?");
+              return(
+                <div key={req.id} style={{background:"rgba(255,212,120,0.06)",
+                  border:"1px solid rgba(255,212,120,0.2)",borderRadius:14,
+                  padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:40,height:40,borderRadius:11,flexShrink:0,
+                    background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                    border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
+                    justifyContent:"center",fontSize:20}}>{avatar}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
+                      fontFamily:"'Cormorant Garamond',serif"}}>{req.profile?.name||"Unknown"}</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+                      {req.profile?.email||""}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>respond(req.id,false)} style={{padding:"7px 12px",borderRadius:8,
+                      background:"rgba(255,80,80,0.1)",border:"1px solid rgba(255,80,80,0.25)",
+                      color:"#FF7878",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+                      Decline
+                    </button>
+                    <button onClick={()=>respond(req.id,true)} style={{padding:"7px 12px",borderRadius:8,
+                      background:"rgba(168,255,120,0.12)",border:"1px solid rgba(168,255,120,0.3)",
+                      color:"#A8FF78",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+                      Accept
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Add friend */}
+      <div style={{marginBottom:20,padding:"16px",background:"rgba(255,255,255,0.025)",
+        border:"1px solid rgba(255,255,255,0.07)",borderRadius:16}}>
+        <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+          color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+          Add Friend
+        </p>
+        <div style={{display:"flex",gap:8}}>
+          <input value={email} onChange={e=>setEmail(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&sendRequest()}
+            placeholder="Their email address…"
+            style={{flex:1,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+              borderRadius:10,padding:"10px 14px",color:"#F0F0F0",fontSize:13.5,outline:"none",
+              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"}}/>
+          <button onClick={sendRequest} disabled={!email.trim()||sending} style={{
+            padding:"0 16px",borderRadius:10,border:"none",cursor:"pointer",
+            background:"rgba(168,255,120,0.15)",color:"#A8FF78",
+            fontSize:13,fontWeight:700,fontFamily:"'DM Sans',sans-serif",flexShrink:0,
+            opacity:sending?0.6:1}}>
+            {sending?"…":"Add"}
+          </button>
+        </div>
+        {error&&<p style={{fontSize:12,color:"#FF7878",margin:"8px 0 0",fontFamily:"'DM Sans',sans-serif"}}>{error}</p>}
+        {success&&<p style={{fontSize:12,color:"#A8FF78",margin:"8px 0 0",fontFamily:"'DM Sans',sans-serif"}}>{success}</p>}
+      </div>
+
+      {/* Friends list */}
+      {loading ? (
+        <div style={{textAlign:"center",padding:"40px 0"}}>
+          <div style={{width:24,height:24,border:"2px solid rgba(255,255,255,0.1)",
+            borderTopColor:"rgba(255,255,255,0.5)",borderRadius:"50%",
+            animation:"spin 0.8s linear infinite",margin:"0 auto"}}/>
+        </div>
+      ) : friends.length===0 ? (
+        <div style={{textAlign:"center",padding:"40px 0"}}>
+          <div style={{fontSize:40,marginBottom:12,opacity:0.15}}>🤝</div>
+          <p style={{fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
+            No friends yet.<br/>Add someone by their email.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+            Friends ({friends.length})
+          </p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {friends.map(f=>{
+              const {avatar,color}=getCharacter(f.name||"?");
+              const friendQuests=quests.filter(q=>q.invitees&&q.invitees.toLowerCase().includes(f.name?.toLowerCase()));
+              return(
+                <div key={f.id} style={{background:"rgba(255,255,255,0.03)",
+                  border:`1px solid ${color}25`,borderLeft:`3px solid ${color}`,
+                  borderRadius:14,padding:"14px 16px",
+                  display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:44,height:44,borderRadius:12,flexShrink:0,
+                    background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                    border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
+                    justifyContent:"center",fontSize:22}}>{avatar}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:700,color:"#F0F0F0",
+                      fontFamily:"'Cormorant Garamond',serif"}}>{f.name}</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>
+                      {f.email}
+                    </div>
+                    <div style={{fontSize:11,color:color,fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
+                      {friendQuests.length} shared quest{friendQuests.length!==1?"s":""}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
@@ -2058,10 +2379,13 @@ export default function App(){
   const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:scopedQuests.filter(q=>q.status===s).length}),{});
   const completedCount=personalQuests.filter(q=>q.status==="Completed").length;
 
+  const userXP = calcXP(quests);
+  const userRank = getRank(userXP);
+
   const TABS=[
     {id:"quests",   label:"Quests",   icon:Icons.shield, count:personalQuests.length},
     {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length},
-    {id:"party",    label:"Party",    icon:Icons.users,  count:members.length},
+    {id:"friends",  label:"Friends",  icon:Icons.users,  count:0},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
   ];
@@ -2142,7 +2466,12 @@ export default function App(){
               </div>
             </div>
           </div>
-          <h1 style={{fontSize:30,fontWeight:700,letterSpacing:"-0.03em",marginBottom:18,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2 0%,rgba(242,242,242,0.5) 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Side Quests</h1>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+            <h1 style={{fontSize:30,fontWeight:700,letterSpacing:"-0.03em",margin:0,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2 0%,rgba(242,242,242,0.5) 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Side Quests</h1>
+            <div style={{flexShrink:0,cursor:"pointer"}} onClick={()=>setTab("friends")}>
+              <RankBadge xp={userXP} size="sm"/>
+            </div>
+          </div>
           <div style={{display:"flex",gap:0,borderBottom:"1px solid rgba(255,255,255,0.06)",overflowX:"auto"}}>
             {TABS.map(t=>(
               <button key={t.id} onClick={()=>{setTab(t.id);setMemberDetail(null);}} style={{
@@ -2316,6 +2645,10 @@ export default function App(){
           <MemberDetailPage member={memberDetail} quests={quests}
             onBack={()=>setMemberDetail(null)}
             onEdit={m=>{setMemberModal(m);setMemberDetail(null);}}/>
+        )}
+
+        {tab==="friends"&&(
+          <FriendsPage user={user} quests={quests}/>
         )}
 
         {tab==="completed"&&(
