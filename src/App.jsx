@@ -2880,11 +2880,14 @@ function AuthScreen({ onAuth }) {
     try {
       if(mode==="signup") {
         const d = await sb.signUp(email.trim(), password, name.trim());
-        // If we got a token back, confirmation is off — log them in directly
-        if(d.access_token) {
-          onAuth({ id: d.user?.id||sb.getUser()?.id, email: email.trim() });
-        } else {
-          setDone(true); // confirmation email sent
+        // Always try to sign in immediately after signup
+        // This works whether confirmation is on or off
+        try {
+          const s = await sb.signIn(email.trim(), password);
+          onAuth({ id: s.user?.id, email: email.trim() });
+        } catch(e) {
+          // If sign in fails, confirmation email was sent
+          setDone(true);
         }
       } else {
         const d = await sb.signIn(email.trim(), password);
