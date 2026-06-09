@@ -1906,6 +1906,15 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
         <Icon d={Icons.plus} size={16} stroke="#0A0A0C"/> Add Quest
       </button>
 
+      {/* Made by footer */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:5,
+        pointerEvents:"none",display:"flex",justifyContent:"center",paddingBottom:8}}>
+        <span style={{fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:"'DM Sans',sans-serif",
+          letterSpacing:"0.06em"}}>
+          Made by <span style={{color:"rgba(255,255,255,0.2)",fontWeight:600}}>Murad Mirzayev</span>
+        </span>
+      </div>
+
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
     </div>
@@ -3503,6 +3512,15 @@ export default function App(){
           {tab==="quests"?"New Quest":tab==="boards"?"New Board":"Add Member"}
         </button>
       )}
+
+      {/* Made by footer */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:5,
+        pointerEvents:"none",display:"flex",justifyContent:"center",paddingBottom:8}}>
+        <span style={{fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:"'DM Sans',sans-serif",
+          letterSpacing:"0.06em"}}>
+          Made by <span style={{color:"rgba(255,255,255,0.2)",fontWeight:600}}>Murad Mirzayev</span>
+        </span>
+      </div>
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
