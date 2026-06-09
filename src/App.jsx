@@ -111,10 +111,16 @@ const sb = {
   },
   async respondFriendRequest(id, accept) {
     const status = accept ? "accepted" : "declined";
-    await fetch(`${SUPABASE_URL}/rest/v1/friendships?id=eq.${id}`, {
-      method:"PATCH", headers:{...this.h,"Prefer":"return=minimal"},
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/friendships?id=eq.${id}`, {
+      method:"PATCH",
+      headers:{...this.h,"Prefer":"return=minimal","Content-Type":"application/json"},
       body:JSON.stringify({status})
     });
+    if(!r.ok) {
+      const err = await r.text();
+      console.error("respond error:", r.status, err);
+      throw new Error("Could not update request: " + r.status);
+    }
   },
   async getFriendProfiles(userId) {
     // Get ALL friendships first (don't bail early!)
@@ -1927,8 +1933,11 @@ function FriendsPage({ user, quests, onAddToQuest }) {
   const respond = async(id, accept) => {
     try {
       await sb.respondFriendRequest(id, accept);
-      load();
-    } catch(e) { console.error(e); }
+      await load();
+    } catch(e) {
+      console.error("respond failed:", e);
+      setError(e.message||"Could not respond. Try again.");
+    }
   };
 
   return (
@@ -2064,6 +2073,117 @@ function FriendsPage({ user, quests, onAddToQuest }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ─── PROFILE SETUP SCREEN ─────────────────────────────────────────────────────
+function ProfileSetupScreen({ user, onDone }) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const preview = name.trim() || user.email?.split("@")[0] || "Adventurer";
+  const { avatar, color } = getCharacter(preview);
+
+  const save = async() => {
+    if(!name.trim()) return;
+    setSaving(true);
+    try {
+      // Update the member record with chosen display name
+      await sb.upsert("members", {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        display_name: name.trim(),
+        email: user.email,
+        user_id: user.id,
+        note: "Account owner",
+        created_at: new Date().toISOString(),
+      });
+      onDone(name.trim());
+    } catch(e) {
+      setError("Could not save. Try again.");
+      console.error(e);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",
+      justifyContent:"center",padding:24,fontFamily:"'DM Sans',sans-serif",position:"relative",overflow:"hidden"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{background:#08080A;}
+        @keyframes cardIn{from{opacity:0;transform:translateY(20px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+        @keyframes orb1{0%,100%{transform:translate(0,0);}50%{transform:translate(40px,-30px);}}
+      `}</style>
+
+      {/* Orb */}
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",overflow:"hidden"}}>
+        <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",
+          background:`radial-gradient(circle,${color}12 0%,transparent 70%)`,
+          top:-100,left:-100,animation:"orb1 12s ease-in-out infinite"}}/>
+      </div>
+
+      <div style={{maxWidth:380,width:"100%",animation:"cardIn 0.5s ease both",position:"relative",zIndex:1}}>
+        {/* Avatar preview */}
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{width:80,height:80,borderRadius:22,margin:"0 auto 14px",
+            background:`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+            border:`2px solid ${color}50`,display:"flex",alignItems:"center",
+            justifyContent:"center",fontSize:40,
+            boxShadow:`0 0 32px ${color}30`}}>
+            {avatar}
+          </div>
+          <h1 style={{fontSize:26,fontWeight:700,color:"#F2F2F2",
+            fontFamily:"'Cormorant Garamond',serif",marginBottom:4}}>{preview}</h1>
+          <p style={{fontSize:12,color:color,fontWeight:600,letterSpacing:"0.06em",
+            textTransform:"uppercase"}}>{getTitle(preview)}</p>
+        </div>
+
+        <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.09)",
+          borderRadius:24,padding:"28px 24px",display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{textAlign:"center",marginBottom:4}}>
+            <h2 style={{fontSize:19,fontWeight:700,color:"#F2F2F2",
+              fontFamily:"'Cormorant Garamond',serif",marginBottom:6}}>
+              Choose your name
+            </h2>
+            <p style={{fontSize:13,color:"rgba(255,255,255,0.35)",lineHeight:1.6}}>
+              This is what your friends will see. Your character is auto-generated from it.
+            </p>
+          </div>
+
+          <input value={name} onChange={e=>setName(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&save()}
+            placeholder="Your name or nickname…"
+            autoFocus
+            style={{width:"100%",background:"rgba(255,255,255,0.05)",
+              border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,
+              padding:"14px 16px",color:"#F0F0F0",fontSize:15,outline:"none",
+              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",
+              transition:"border-color 0.2s"}}
+            onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.3)"}
+            onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.12)"}/>
+
+          {error&&<p style={{fontSize:12,color:"#FF7878",fontFamily:"'DM Sans',sans-serif"}}>{error}</p>}
+
+          <button onClick={save} disabled={!name.trim()||saving} style={{
+            background:name.trim()?"linear-gradient(135deg,#e8e8e8,#fff)":"rgba(255,255,255,0.07)",
+            color:name.trim()?"#0A0A0C":"rgba(255,255,255,0.2)",
+            border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,
+            cursor:name.trim()?"pointer":"not-allowed",fontFamily:"'DM Sans',sans-serif",
+            opacity:saving?0.7:1}}>
+            {saving?"Saving…":"Begin My Journey"}
+          </button>
+
+          <button onClick={()=>onDone(user.email?.split("@")[0]||"Adventurer")}
+            style={{background:"none",border:"none",cursor:"pointer",
+              fontSize:12,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>
+            Skip for now
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2227,6 +2347,7 @@ function AuthScreen({ onAuth }) {
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App(){
   const [user,setUser]           = useState(undefined);
+  const [profileDone,setProfileDone] = useState(false);
   const [quests,setQuests]       = useState([]);
   const [members,setMembers]     = useState([]);
   const [boards,setBoards]       = useState([]);
@@ -2269,24 +2390,17 @@ export default function App(){
   },[]);
 
   const ensureUserMember = async(userId, email, existingMembers) => {
-    // Check if a member with this email already exists
-    const name = email.split("@")[0]; // use part before @ as display name
-    const alreadyExists = existingMembers.some(m =>
-      m.email === email || m.name.toLowerCase() === name.toLowerCase()
-    );
-    if(alreadyExists) return existingMembers;
-    // Create a member record linked to this account
-    const member = {
-      id: crypto.randomUUID(),
-      name,
-      email,
-      role: "",
-      note: "Account owner",
-      user_id: userId,
-      created_at: new Date().toISOString(),
-    };
-    try { await sb.upsert("members", member); } catch(e) { console.error(e); }
-    return [member, ...existingMembers];
+    const existing = existingMembers.find(m => m.user_id === userId);
+    if(existing) {
+      // Profile exists — check if they have a real display name
+      if(existing.display_name || (existing.name && !existing.name.includes("@"))) {
+        setProfileDone(true);
+      }
+      return existingMembers;
+    }
+    // No profile yet — will show setup screen
+    setProfileDone(false);
+    return existingMembers;
   };
 
   const loadData = async(userId) => {
@@ -2431,6 +2545,29 @@ export default function App(){
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
   ];
+
+  // Profile setup gate
+  if(user && !profileDone) return (
+    <ProfileSetupScreen
+      user={user}
+      onDone={async(chosenName)=>{
+        // Save member with chosen name
+        try {
+          await sb.upsert("members", {
+            id: crypto.randomUUID(),
+            name: chosenName,
+            display_name: chosenName,
+            email: user.email,
+            user_id: user.id,
+            note: "Account owner",
+            created_at: new Date().toISOString(),
+          });
+        } catch(e) { console.error(e); }
+        setProfileDone(true);
+        loadData(user.id);
+      }}
+    />
+  );
 
   // Invite code gate — show join screen before main app if URL has ?join=
   if(user && inviteCode) return (
