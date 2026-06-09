@@ -28,7 +28,14 @@ const sb = {
       }),
     });
     const d = await r.json();
-    if(d.error) throw new Error(d.error.message||d.msg||"Sign up failed");
+    if(d.error) {
+      const msg = d.error.message||d.msg||"";
+      if(msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists"))
+        throw new Error("This email already has an account. Click Sign In instead.");
+      if(msg.toLowerCase().includes("password"))
+        throw new Error("Password must be at least 6 characters.");
+      throw new Error(msg||"Sign up failed. Please try again.");
+    }
     if(d.access_token) this._token = d.access_token;
     return d;
   },
@@ -40,11 +47,19 @@ const sb = {
       body:JSON.stringify({email,password}),
     });
     const d = await r.json();
-    if(d.error) throw new Error(d.error.message||d.msg||"Sign in failed");
+    if(d.error) {
+      // Give friendly error messages
+      const msg = d.error.message||d.msg||"";
+      if(msg.toLowerCase().includes("invalid login") || msg.toLowerCase().includes("invalid credentials"))
+        throw new Error("Wrong email or password. If you don't have an account, click Sign Up.");
+      if(msg.toLowerCase().includes("email not confirmed"))
+        throw new Error("Please confirm your email first — check your inbox.");
+      throw new Error(msg||"Sign in failed. Please try again.");
+    }
+    if(!d.access_token) throw new Error("Sign in failed. Please try again.");
     this._token = d.access_token;
     localStorage.setItem("sq_token", d.access_token);
     localStorage.setItem("sq_refresh", d.refresh_token);
-    // Cache the display name
     if(d.user?.user_metadata?.display_name) {
       localStorage.setItem("sq_name", d.user.user_metadata.display_name);
     }
@@ -2792,7 +2807,9 @@ function AuthScreen({ onAuth }) {
   const [done, setDone]       = useState(false);
 
   const submit = async () => {
-    if(!email.trim()||!password.trim()) return;
+    if(!email.trim()) { setError("Please enter your email."); return; }
+    if(!password.trim()) { setError("Please enter your password."); return; }
+    if(password.length < 6) { setError("Password must be at least 6 characters."); return; }
     if(mode==="signup"&&!name.trim()){ setError("Please enter your name."); return; }
     setLoading(true); setError("");
     try {
@@ -2880,10 +2897,10 @@ function AuthScreen({ onAuth }) {
         <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.09)",
           borderRadius:24,padding:"28px 24px",display:"flex",flexDirection:"column",gap:16}}>
 
-          {/* Mode toggle */}
+          {/* Mode indicator */}
           <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4,gap:4}}>
             {["signin","signup"].map(m=>(
-              <button key={m} onClick={()=>{setMode(m);setError("");}} style={{
+              <button key={m} onClick={()=>{setMode(m);setError("");setName("");}} style={{
                 flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",
                 background:mode===m?"rgba(255,255,255,0.1)":"transparent",
                 color:mode===m?"#F0F0F0":"rgba(255,255,255,0.35)",
@@ -2938,7 +2955,25 @@ function AuthScreen({ onAuth }) {
           </button>
         </div>
 
-        <p style={{textAlign:"center",marginTop:20,fontSize:12,color:"rgba(255,255,255,0.2)"}}>
+        <p style={{textAlign:"center",marginTop:16,fontSize:12,color:"rgba(255,255,255,0.25)",
+          fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+          {mode==="signin"?(
+            <>Don't have an account?{" "}
+              <span onClick={()=>{setMode("signup");setError("");}}
+                style={{color:"rgba(255,255,255,0.6)",cursor:"pointer",fontWeight:600,textDecoration:"underline"}}>
+                Sign Up
+              </span>
+            </>
+          ):(
+            <>Already have an account?{" "}
+              <span onClick={()=>{setMode("signin");setError("");}}
+                style={{color:"rgba(255,255,255,0.6)",cursor:"pointer",fontWeight:600,textDecoration:"underline"}}>
+                Sign In
+              </span>
+            </>
+          )}
+        </p>
+        <p style={{textAlign:"center",marginTop:8,fontSize:11,color:"rgba(255,255,255,0.15)",fontFamily:"'DM Sans',sans-serif"}}>
           Your quests are private and only visible to you.
         </p>
       </div>
