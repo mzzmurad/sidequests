@@ -28,13 +28,20 @@ const sb = {
       }),
     });
     const d = await r.json();
+    console.log("Signup response:", JSON.stringify(d));
     if(d.error) {
-      const msg = d.error.message||d.msg||"";
-      if(msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists"))
+      const msg = d.error.message||d.error_description||d.msg||"";
+      if(msg.toLowerCase().includes("already registered")||msg.toLowerCase().includes("already exists"))
         throw new Error("This email already has an account. Click Sign In instead.");
       if(msg.toLowerCase().includes("password"))
         throw new Error("Password must be at least 6 characters.");
+      if(msg.toLowerCase().includes("signup"))
+        throw new Error("Signups are disabled. Contact the app owner.");
       throw new Error(msg||"Sign up failed. Please try again.");
+    }
+    // Check if user was actually created
+    if(!d.user && !d.access_token) {
+      throw new Error("Sign up failed — no user returned. Try again.");
     }
     if(d.access_token) this._token = d.access_token;
     return d;
