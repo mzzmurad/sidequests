@@ -84,16 +84,21 @@ const sb = {
 
   // ── Friends ───────────────────────────────────────────────────────────────
   async sendFriendRequest(fromId, toEmail) {
-    // First find user by email via members table
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/members?email=eq.${encodeURIComponent(toEmail)}&select=user_id,name,email&limit=1`, {headers:this.h});
-    const d = await r.json();
-    const target = Array.isArray(d) ? d[0] : null;
-    if(!target?.user_id) throw new Error("No user found with that email");
-    if(target.user_id === fromId) throw new Error("You can't add yourself");
-    // Check existing
+    // Use RPC function to find user by email (searches auth.users safely)
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/find_user_by_email`, {
+      method:"POST",
+      headers:{...this.h,"Content-Type":"application/json"},
+      body:JSON.stringify({search_email: toEmail.toLowerCase().trim()})
+    });
+    const result = await r.json();
+    const target = Array.isArray(result) ? result[0] : result;
+    if(!target?.user_id) throw new Error("No account found with that email. Make sure they have signed up first.");
+    if(target.user_id === fromId) throw new Error("You can't add yourself!");
+    // Check existing friendship
     const check = await fetch(`${SUPABASE_URL}/rest/v1/friendships?or=(and(from_id.eq.${fromId},to_id.eq.${target.user_id}),and(from_id.eq.${target.user_id},to_id.eq.${fromId}))`, {headers:this.h});
     const existing = await check.json();
-    if(Array.isArray(existing) && existing.length > 0) throw new Error("Already friends or request pending");
+    if(Array.isArray(existing) && existing.length > 0) throw new Error("Already friends or request already sent!");
+    // Send the request
     await fetch(`${SUPABASE_URL}/rest/v1/friendships`, {
       method:"POST", headers:{...this.h,"Prefer":"return=minimal"},
       body:JSON.stringify({id:crypto.randomUUID(),from_id:fromId,to_id:target.user_id,status:"pending",created_at:new Date().toISOString()})
