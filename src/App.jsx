@@ -105,6 +105,12 @@ const sb = {
     });
     return target;
   },
+  async removeFriend(userId, friendUserId) {
+    // Delete the friendship row regardless of who sent it
+    await fetch(`${SUPABASE_URL}/rest/v1/friendships?or=(and(from_id.eq.${userId},to_id.eq.${friendUserId}),and(from_id.eq.${friendUserId},to_id.eq.${userId}))`, {
+      method:"DELETE", headers:this.h
+    });
+  },
   async getFriendships(userId) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/friendships?or=(from_id.eq.${userId},to_id.eq.${userId})`, {headers:this.h});
     const d = await r.json(); return Array.isArray(d)?d:[];
@@ -168,6 +174,21 @@ const sb = {
     }
 
     return {friends, pending, incoming:incomingProfiles};
+  },
+
+  // ── Memories ─────────────────────────────────────────────────────────────
+  async getMemories(userId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&order=date.desc`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+  async upsertMemory(memory) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/memories`, {
+      method:"POST", headers:{...this.h,"Prefer":"resolution=merge-duplicates"},
+      body:JSON.stringify(memory)
+    }); if(!r.ok) throw new Error();
+  },
+  async deleteMemory(id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/memories?id=eq.${id}`, {method:"DELETE", headers:this.h});
   },
 
   // ── Boards ────────────────────────────────────────────────────────────────
@@ -2115,6 +2136,12 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
                       {friendQuests.length} shared quest{friendQuests.length!==1?"s":""}
                     </div>
                   </div>
+                  <button onClick={async(e)=>{e.stopPropagation();if(!window.confirm(`Remove ${f.name} from friends?`))return;try{await sb.removeFriend(user.id,f.user_id);load();}catch(e){console.error(e);}}}
+                    style={{background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",
+                      borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,120,120,0.7)",
+                      display:"flex",alignItems:"center",flexShrink:0}}>
+                    <Icon d={Icons.trash} size={13}/>
+                  </button>
                 </div>
               );
             })}
@@ -2261,21 +2288,25 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
     if(!name.trim()) return;
     setSaving(true);
     try {
+      // Get existing member record to preserve its ID
+      const existing = await sb.getAll("members", user.id);
+      const me = Array.isArray(existing)?existing.find(m=>m.user_id===user.id):null;
       await sb.upsert("members",{
-        id:crypto.randomUUID(),
-        name:name.trim(),
-        display_name:name.trim(),
-        email:user.email,
-        user_id:user.id,
-        note:"Account owner",
-        created_at:new Date().toISOString(),
+        id: me?.id || crypto.randomUUID(),
+        name: name.trim(),
+        display_name: name.trim(),
+        email: user.email,
+        user_id: user.id,
+        note: "Account owner",
+        created_at: me?.created_at || new Date().toISOString(),
       });
       setSaved(true);
       onNameChange(name.trim());
-      setTimeout(()=>setSaved(false),2000);
-    } catch(e){console.error(e);}
+      setTimeout(()=>setSaved(false),2500);
+    } catch(e){console.error(e); setError("Could not save name.");}
     setSaving(false);
   };
+  const [error, setError] = useState("");
 
   const preview = name.trim()||user.email?.split("@")[0]||"Adventurer";
   const {avatar,color} = getCharacter(preview);
@@ -2394,6 +2425,349 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
         Sign Out
       </button>
     </div>
+  );
+}
+
+
+// ─── MEMORIES PAGE ────────────────────────────────────────────────────────────
+function MemoriesPage({ user }) {
+  const [viewDate, setViewDate]   = useState(new Date());
+  const [memories, setMemories]   = useState([]);
+  const [selected, setSelected]   = useState(null); // {date, memory|null}
+  const [loading, setLoading]     = useState(true);
+
+  const year  = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const monthName = viewDate.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const firstDay = new Date(year,month,1).getDay();
+  const daysInMonth = new Date(year,month+1,0).getDate();
+  const today = new Date();
+
+  useEffect(()=>{
+    setLoading(true);
+    sb.getMemories(user.id).then(m=>{ setMemories(m); setLoading(false); }).catch(()=>setLoading(false));
+  },[]);
+
+  const getMemory = (d) => {
+    const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    return memories.find(m=>m.date===dateStr)||null;
+  };
+
+  const openDay = (d) => {
+    const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    setSelected({date:dateStr, memory:getMemory(d)});
+  };
+
+  const isToday = (d) => today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
+  const isFuture = (d) => new Date(year,month,d) > today;
+
+  return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
+      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+        color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Story</p>
+      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:20}}>
+        Memories
+      </h2>
+
+      {/* Calendar */}
+      <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
+        borderRadius:20,padding:"20px",marginBottom:16}}>
+        {/* Month nav */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <h3 style={{fontSize:16,fontWeight:700,color:"rgba(255,255,255,0.8)",
+            fontFamily:"'Cormorant Garamond',serif"}}>{monthName}</h3>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setViewDate(new Date(year,month-1,1))}
+              style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",
+                borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:16}}>
+              ‹
+            </button>
+            <button onClick={()=>setViewDate(new Date(year,month+1,1))}
+              style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",
+                borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:16}}>
+              ›
+            </button>
+          </div>
+        </div>
+
+        {/* Day labels */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
+          {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d=>(
+            <div key={d} style={{textAlign:"center",fontSize:10,color:"rgba(255,255,255,0.2)",
+              fontFamily:"'DM Sans',sans-serif",fontWeight:600,letterSpacing:"0.05em"}}>{d}</div>
+          ))}
+        </div>
+
+        {/* Days grid */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+          {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
+          {Array.from({length:daysInMonth}).map((_,i)=>{
+            const d = i+1;
+            const mem = getMemory(d);
+            const tod = isToday(d);
+            const fut = isFuture(d);
+            return(
+              <button key={d} onClick={()=>!fut&&openDay(d)} style={{
+                aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",
+                justifyContent:"center",borderRadius:10,border:"none",cursor:fut?"default":"pointer",
+                background: mem?"rgba(192,132,252,0.15)":tod?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)",
+                outline: tod?"1px solid rgba(255,255,255,0.25)":mem?"1px solid rgba(192,132,252,0.4)":"1px solid transparent",
+                transition:"all 0.15s",opacity:fut?0.3:1,
+                position:"relative",
+              }}
+                onMouseEnter={e=>{ if(!fut) e.currentTarget.style.background=mem?"rgba(192,132,252,0.25)":"rgba(255,255,255,0.08)"; }}
+                onMouseLeave={e=>e.currentTarget.style.background=mem?"rgba(192,132,252,0.15)":tod?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)"}
+              >
+                {mem?.photo?(
+                  <img src={mem.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover",
+                    borderRadius:9,position:"absolute",inset:0,opacity:0.6}}/>
+                ):null}
+                <span style={{fontSize:12,color:mem?"rgba(255,255,255,0.9)":tod?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",
+                  fontFamily:"'DM Sans',sans-serif",fontWeight:tod?700:400,
+                  position:"relative",zIndex:1}}>{d}</span>
+                {mem&&<div style={{width:4,height:4,borderRadius:"50%",background:"#C084FC",
+                  position:"absolute",bottom:3,zIndex:1}}/>}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{marginTop:12,display:"flex",alignItems:"center",gap:10,
+          fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+            <span style={{width:8,height:8,borderRadius:2,background:"rgba(192,132,252,0.4)",display:"inline-block"}}/>
+            has memory
+          </span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+            <span style={{outline:"1px solid rgba(255,255,255,0.25)",width:8,height:8,borderRadius:2,display:"inline-block"}}/>
+            today
+          </span>
+        </div>
+      </div>
+
+      {/* Recent memories list */}
+      {memories.length>0&&(
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+            Recent Memories
+          </p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {memories.slice(0,10).map(m=>(
+              <button key={m.id} onClick={()=>setSelected({date:m.date,memory:m})}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
+                  borderRadius:14,background:"rgba(255,255,255,0.025)",
+                  border:"1px solid rgba(192,132,252,0.2)",cursor:"pointer",textAlign:"left",
+                  transition:"all 0.15s"}}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(192,132,252,0.08)"}
+                onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.025)"}
+              >
+                {m.photo?(
+                  <img src={m.photo} alt="" style={{width:48,height:48,borderRadius:10,
+                    objectFit:"cover",flexShrink:0,border:"1px solid rgba(192,132,252,0.3)"}}/>
+                ):(
+                  <div style={{width:48,height:48,borderRadius:10,flexShrink:0,
+                    background:"rgba(192,132,252,0.1)",border:"1px solid rgba(192,132,252,0.2)",
+                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+                    {m.emoji||"📸"}
+                  </div>
+                )}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0",
+                    fontFamily:"'Cormorant Garamond',serif",
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {m.title||"Memory"}
+                  </div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",
+                    fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
+                    {new Date(m.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
+                  </div>
+                  {m.note&&<div style={{fontSize:11.5,color:"rgba(255,255,255,0.4)",
+                    fontFamily:"'DM Sans',sans-serif",marginTop:2,
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {m.note}
+                  </div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Day modal */}
+      {selected&&(
+        <MemoryDayModal
+          date={selected.date}
+          memory={selected.memory}
+          userId={user.id}
+          onSave={async(mem)=>{
+            await sb.upsertMemory({...mem,user_id:user.id});
+            const updated = await sb.getMemories(user.id);
+            setMemories(updated);
+            setSelected(null);
+          }}
+          onDelete={async(id)=>{
+            await sb.deleteMemory(id);
+            const updated = await sb.getMemories(user.id);
+            setMemories(updated);
+            setSelected(null);
+          }}
+          onClose={()=>setSelected(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── MEMORY DAY MODAL ─────────────────────────────────────────────────────────
+function MemoryDayModal({ date, memory, userId, onSave, onDelete, onClose }) {
+  const [title, setTitle]   = useState(memory?.title||"");
+  const [note, setNote]     = useState(memory?.note||"");
+  const [photo, setPhoto]   = useState(memory?.photo||null);
+  const [emoji, setEmoji]   = useState(memory?.emoji||"");
+  const [saving, setSaving] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  const handlePhoto=(e)=>{
+    const file=e.target.files?.[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>setPhoto(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const save = async() => {
+    setSaving(true);
+    try {
+      await onSave({
+        id: memory?.id||crypto.randomUUID(),
+        date, title:title.trim()||date,
+        note:note.trim(), photo, emoji,
+        created_at: memory?.created_at||new Date().toISOString(),
+      });
+    } catch(e){console.error(e);}
+    setSaving(false);
+  };
+
+  const displayDate = new Date(date+"T00:00:00").toLocaleDateString("en-US",
+    {weekday:"long",month:"long",day:"numeric",year:"numeric"});
+
+  const QUICK_EMOJI = ["😊","🥳","😔","🌟","❤","🔥","🌙","✈","🍕","🎵","💪","🤝","🌿","🏖","🎉"];
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.75:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
+      justifyContent:"center",zIndex:9999,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
+        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        width:"100%",maxWidth:560,padding:"12px 24px 52px",
+        display:"flex",flexDirection:"column",gap:16,
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
+        maxHeight:"85vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0",flexShrink:0}}/>
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <h2 style={{margin:0,fontSize:18,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
+              {displayDate}
+            </h2>
+            {memory&&<p style={{margin:"2px 0 0",fontSize:11,color:"rgba(192,132,252,0.7)",fontFamily:"'DM Sans',sans-serif"}}>
+              Editing memory
+            </p>}
+          </div>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:10,padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+            <Icon d={Icons.x} size={16}/>
+          </button>
+        </div>
+
+        {/* Quick emoji */}
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:8}}>Vibe</p>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {QUICK_EMOJI.map(e=>(
+              <button key={e} onClick={()=>setEmoji(emoji===e?"":e)} style={{
+                fontSize:20,padding:"6px",borderRadius:8,border:"none",cursor:"pointer",
+                background:emoji===e?"rgba(192,132,252,0.2)":"rgba(255,255,255,0.04)",
+                outline:emoji===e?"1px solid rgba(192,132,252,0.5)":"none",transition:"all 0.1s"}}>
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Title */}
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Title</p>
+          <input value={title} onChange={e=>setTitle(e.target.value)}
+            placeholder="What happened today?"
+            style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+              borderRadius:12,padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
+              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"}}/>
+        </div>
+
+        {/* Note */}
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Note</p>
+          <textarea value={note} onChange={e=>setNote(e.target.value)}
+            placeholder="A few words about this day…" rows={3}
+            style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+              borderRadius:12,padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
+              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",resize:"vertical",lineHeight:1.6}}/>
+        </div>
+
+        {/* Photo */}
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Photo</p>
+          {photo?(
+            <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
+              <img src={photo} alt="" style={{width:"100%",display:"block",maxHeight:180,objectFit:"cover"}}/>
+              <button onClick={()=>setPhoto(null)} style={{position:"absolute",top:8,right:8,
+                background:"rgba(0,0,0,0.7)",border:"1px solid rgba(255,255,255,0.2)",
+                borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"rgba(255,255,255,0.8)",fontSize:12}}>
+                Remove
+              </button>
+            </div>
+          ):(
+            <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:12,
+              cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px dashed rgba(255,255,255,0.12)"}}>
+              <Icon d={Icons.camera} size={16} stroke="rgba(255,255,255,0.4)"/>
+              <span style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
+                Add a photo from this day
+              </span>
+              <input type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
+            </label>
+          )}
+        </div>
+
+        {/* Buttons */}
+        <div style={{display:"flex",gap:10}}>
+          {memory&&(
+            <button onClick={()=>onDelete(memory.id)} style={{padding:"14px",borderRadius:12,
+              background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",
+              color:"#FF7878",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+              Delete
+            </button>
+          )}
+          <button onClick={save} disabled={saving} style={{flex:1,padding:"14px",borderRadius:12,
+            background:"linear-gradient(135deg,#C084FC,#818CF8)",
+            color:"#fff",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,
+            fontFamily:"'DM Sans',sans-serif",opacity:saving?0.7:1}}>
+            {saving?"Saving…":memory?"Update Memory":"Save Memory"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -2758,6 +3132,7 @@ export default function App(){
     {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length},
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
+    {id:"memories", label:"Memories", icon:Icons.camera, count:0},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
     {id:"profile",  label:"Profile",  icon:Icons.user,   count:0},
   ];
@@ -3024,6 +3399,10 @@ export default function App(){
 
         {tab==="friends"&&(
           <FriendsPage user={user} quests={quests} onFriendsLoaded={f=>setFriends(f)}/>
+        )}
+
+        {tab==="memories"&&(
+          <MemoriesPage user={user}/>
         )}
 
         {tab==="profile"&&(
