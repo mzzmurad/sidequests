@@ -131,13 +131,21 @@ const sb = {
     const pending  = ships.filter(s=>s.status==="pending" && s.from_id===userId);
     const incoming = ships.filter(s=>s.status==="pending" && s.to_id===userId);
 
-    // Load accepted friend profiles
+    // Load accepted friend profiles via RPC (reliable even if no member record yet)
     let friends = [];
     if(accepted.length>0) {
       const friendIds = accepted.map(s=>s.from_id===userId?s.to_id:s.from_id);
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/members?user_id=in.(${friendIds.join(",")})`, {headers:this.h});
-      const d = await r.json();
-      friends = Array.isArray(d)?d:[];
+      friends = (await Promise.all(friendIds.map(async fid=>{
+        try {
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/find_user_by_id`,{
+            method:"POST",headers:{...this.h,"Content-Type":"application/json"},
+            body:JSON.stringify({search_id:fid})
+          });
+          const d = await r.json();
+          const p = Array.isArray(d)?d[0]:d;
+          return p||null;
+        } catch { return null; }
+      }))).filter(Boolean);
     }
 
     // Load incoming requester profiles via RPC (to get their name+email from auth)
@@ -1101,7 +1109,7 @@ function MemberCard({member,quests,onEdit,onDelete,onClick}){
 }
 
 // ─── QUEST MODAL ──────────────────────────────────────────────────────────────
-function QuestModal({quest,onSave,onClose}){
+function QuestModal({quest,onSave,onClose,friends=[]}){
   const [form,setForm]=useState({...EMPTY_QUEST,...quest});
   const [visible,setVisible]=useState(false);
   const [saving,setSaving]=useState(false);
@@ -1205,15 +1213,54 @@ function QuestModal({quest,onSave,onClose}){
           <LocationSearch value={form.location} onChange={loc=>set("location",loc)}/>
           {form.location?.name&&<div style={{marginTop:12}}><MapView location={form.location} height={180}/></div>}
         </div>
-        <div><label style={lbl}>Invite People</label>
-          <input value={form.invitees} onChange={e=>set("invitees",e.target.value)}
-            placeholder="Friend names (comma separated)" style={inp}
-            onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.22)"}
-            onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.09)"}/>
-          <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"5px 0 0",
-            fontFamily:"'DM Sans',sans-serif"}}>
-            Only friends can be invited. Add friends in the Friends tab first.
-          </p>
+        <div>
+          <label style={lbl}>Invite Friends</label>
+          {friends.length===0?(
+            <div style={{padding:"12px 14px",borderRadius:12,background:"rgba(255,255,255,0.03)",
+              border:"1px solid rgba(255,255,255,0.07)",fontSize:13,
+              color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>
+              No friends yet — add some in the Friends tab first.
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {friends.map(f=>{
+                const {avatar,color}=getCharacter(f.name||"?");
+                const invited=(form.invitees||"").split(",").map(s=>s.trim()).filter(Boolean)
+                  .some(n=>n.toLowerCase()===f.name?.toLowerCase());
+                return(
+                  <button key={f.user_id||f.id} type="button"
+                    onClick={()=>{
+                      const current=(form.invitees||"").split(",").map(s=>s.trim()).filter(Boolean);
+                      const already=current.some(n=>n.toLowerCase()===f.name?.toLowerCase());
+                      const next=already?current.filter(n=>n.toLowerCase()!==f.name?.toLowerCase()):[...current,f.name];
+                      set("invitees",next.join(", "));
+                    }}
+                    style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",
+                      borderRadius:12,cursor:"pointer",textAlign:"left",
+                      background:invited?`${color}12`:"rgba(255,255,255,0.03)",
+                      border:`1px solid ${invited?color+"40":"rgba(255,255,255,0.07)"}`,
+                      transition:"all 0.15s"}}>
+                    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
+                      background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                      border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
+                      justifyContent:"center",fontSize:18}}>{avatar}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:14,fontWeight:600,color:"#F0F0F0",
+                        fontFamily:"'DM Sans',sans-serif"}}>{f.name}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",
+                        fontFamily:"'DM Sans',sans-serif"}}>{f.email}</div>
+                    </div>
+                    <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,
+                      background:invited?color:"rgba(255,255,255,0.06)",
+                      border:`2px solid ${invited?color:"rgba(255,255,255,0.1)"}`,
+                      display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {invited&&<Icon d={Icons.check} size={11} stroke="#0A0A0C"/>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         {/* Photo upload — shown when status is Completed */}
         <div>
@@ -1828,7 +1875,7 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
         <Icon d={Icons.plus} size={16} stroke="#0A0A0C"/> Add Quest
       </button>
 
-      {questModal&&<QuestModal quest={questModal} onSave={saveQuest} onClose={()=>setQuestModal(null)}/>}
+      {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
     </div>
   );
@@ -1890,7 +1937,7 @@ function RankBadge({ xp, size="sm" }) {
 }
 
 // ─── FRIENDS PAGE ─────────────────────────────────────────────────────────────
-function FriendsPage({ user, quests, onAddToQuest }) {
+function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
   const [friends, setFriends]   = useState([]);
   const [pending, setPending]   = useState([]);
   const [incoming, setIncoming] = useState([]);
@@ -1908,6 +1955,7 @@ function FriendsPage({ user, quests, onAddToQuest }) {
       setFriends(data.friends||[]);
       setPending(data.pending||[]);
       setIncoming(data.incoming||[]);
+      if(onFriendsLoaded) onFriendsLoaded(data.friends||[]);
     } catch(e) { console.error(e); }
     setLoading(false);
   };
@@ -2188,6 +2236,167 @@ function ProfileSetupScreen({ user, onDone }) {
   );
 }
 
+
+// ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
+function ProfilePage({ user, quests, onSignOut, onNameChange }) {
+  const [name, setName]       = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const userXP   = calcXP(quests);
+  const userRank = getRank(userXP);
+  const completedCount = quests.filter(q=>q.status==="Completed").length;
+
+  useEffect(()=>{
+    // Load current name
+    sb.getAll("members", user.id).then(m=>{
+      const me = Array.isArray(m)?m.find(x=>x.user_id===user.id):null;
+      if(me) setName(me.display_name||me.name||"");
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[]);
+
+  const saveName = async() => {
+    if(!name.trim()) return;
+    setSaving(true);
+    try {
+      await sb.upsert("members",{
+        id:crypto.randomUUID(),
+        name:name.trim(),
+        display_name:name.trim(),
+        email:user.email,
+        user_id:user.id,
+        note:"Account owner",
+        created_at:new Date().toISOString(),
+      });
+      setSaved(true);
+      onNameChange(name.trim());
+      setTimeout(()=>setSaved(false),2000);
+    } catch(e){console.error(e);}
+    setSaving(false);
+  };
+
+  const preview = name.trim()||user.email?.split("@")[0]||"Adventurer";
+  const {avatar,color} = getCharacter(preview);
+  const nextRank = RANKS.find(r=>r.min>userXP);
+  const pct = nextRank?Math.round(((userXP-userRank.min)/(nextRank.min-userRank.min))*100):100;
+
+  return(
+    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
+      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+        color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Identity</p>
+      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:20}}>
+        Profile
+      </h2>
+
+      {/* Avatar card */}
+      <div style={{background:`${color}08`,border:`1px solid ${color}25`,borderRadius:20,
+        padding:"24px 20px",marginBottom:16,position:"relative",overflow:"hidden",textAlign:"center"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:2,
+          background:`linear-gradient(90deg,transparent,${color}80,transparent)`}}/>
+        <div style={{width:76,height:76,borderRadius:20,margin:"0 auto 12px",
+          background:`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+          border:`2px solid ${color}50`,display:"flex",alignItems:"center",
+          justifyContent:"center",fontSize:38,
+          boxShadow:`0 0 32px ${color}30`}}>{avatar}</div>
+        <div style={{fontSize:22,fontWeight:700,color:"#F2F2F2",
+          fontFamily:"'Cormorant Garamond',serif",marginBottom:4}}>{preview}</div>
+        <div style={{fontSize:11,color:color,fontWeight:700,letterSpacing:"0.08em",
+          textTransform:"uppercase",marginBottom:16}}>{getTitle(preview)}</div>
+        {/* Stats row */}
+        <div style={{display:"flex",gap:0,borderTop:"1px solid rgba(255,255,255,0.06)",paddingTop:14}}>
+          {[
+            {l:"Quests",v:quests.length},
+            {l:"Completed",v:completedCount},
+            {l:"XP",v:userXP},
+          ].map(({l,v},i)=>(
+            <div key={l} style={{flex:1,textAlign:"center",
+              borderLeft:i>0?"1px solid rgba(255,255,255,0.06)":"none"}}>
+              <div style={{fontSize:20,fontWeight:700,color:"#F0F0F0",
+                fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
+              <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:"0.08em",
+                marginTop:3,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Rank card */}
+      <div style={{background:`${userRank.color}10`,border:`1px solid ${userRank.color}30`,
+        borderRadius:16,padding:"16px 18px",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+          <span style={{fontSize:32}}>{userRank.icon}</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:18,fontWeight:700,color:userRank.color,
+              fontFamily:"'Cormorant Garamond',serif"}}>{userRank.name}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
+              {userXP} XP total
+            </div>
+          </div>
+          {nextRank&&<div style={{textAlign:"right"}}>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Next</div>
+            <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.6)",
+              fontFamily:"'DM Sans',sans-serif"}}>{nextRank.name}</div>
+          </div>}
+        </div>
+        {nextRank&&(
+          <div>
+            <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:2}}>
+              <div style={{height:"100%",borderRadius:2,width:`${pct}%`,
+                background:`linear-gradient(90deg,${userRank.color}80,${userRank.color})`,
+                transition:"width 0.8s cubic-bezier(0.34,1.2,0.64,1)",
+                boxShadow:`0 0 8px ${userRank.color}60`}}/>
+            </div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",marginTop:5}}>
+              {nextRank.min-userXP} XP to {nextRank.name}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Edit name */}
+      <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
+        borderRadius:16,padding:"18px 18px",marginBottom:16}}>
+        <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+          color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+          Display Name
+        </p>
+        <div style={{display:"flex",gap:8}}>
+          <input value={name} onChange={e=>setName(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&saveName()}
+            placeholder="Your name…"
+            style={{flex:1,background:"rgba(255,255,255,0.05)",
+              border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,
+              padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
+              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"}}/>
+          <button onClick={saveName} disabled={!name.trim()||saving} style={{
+            padding:"0 18px",borderRadius:10,border:"none",cursor:"pointer",
+            background:saved?"rgba(168,255,120,0.15)":"rgba(255,255,255,0.1)",
+            color:saved?"#A8FF78":"rgba(255,255,255,0.7)",
+            fontSize:13,fontWeight:700,fontFamily:"'DM Sans',sans-serif",flexShrink:0,
+            transition:"all 0.2s"}}>
+            {saving?"…":saved?"Saved!":"Save"}
+          </button>
+        </div>
+        <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"6px 0 0",
+          fontFamily:"'DM Sans',sans-serif"}}>Signed in as {user.email}</p>
+      </div>
+
+      {/* Sign out */}
+      <button onClick={onSignOut} style={{
+        width:"100%",padding:"14px",borderRadius:14,
+        background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",
+        color:"#FF7878",cursor:"pointer",fontSize:14,fontWeight:700,
+        fontFamily:"'DM Sans',sans-serif"}}>
+        Sign Out
+      </button>
+    </div>
+  );
+}
+
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
@@ -2351,6 +2560,7 @@ export default function App(){
   const [quests,setQuests]       = useState([]);
   const [members,setMembers]     = useState([]);
   const [boards,setBoards]       = useState([]);
+  const [friends,setFriends]     = useState([]);
   const [friendRequestCount,setFriendRequestCount] = useState(0);
   const [activeBoard,setActiveBoard] = useState(null); // board being viewed
   const [inviteBoard,setInviteBoard] = useState(null); // board to show invite modal for
@@ -2426,6 +2636,11 @@ export default function App(){
       const memberList = Array.isArray(m)?m:[];
       const updatedMembers = await ensureUserMember(userId, sb.getUser()?.email||"", memberList);
       setMembers(updatedMembers);
+      // Load friends
+      try {
+        const fd = await sb.getFriendProfiles(userId);
+        setFriends(fd.friends||[]);
+      } catch(e) { console.error("friends load",e); }
     } catch(e) {
       console.error("loadData failed",e);
       setSyncing(false);
@@ -2544,30 +2759,8 @@ export default function App(){
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
+    {id:"profile",  label:"Profile",  icon:Icons.user,   count:0},
   ];
-
-  // Profile setup gate
-  if(user && !profileDone) return (
-    <ProfileSetupScreen
-      user={user}
-      onDone={async(chosenName)=>{
-        // Save member with chosen name
-        try {
-          await sb.upsert("members", {
-            id: crypto.randomUUID(),
-            name: chosenName,
-            display_name: chosenName,
-            email: user.email,
-            user_id: user.id,
-            note: "Account owner",
-            created_at: new Date().toISOString(),
-          });
-        } catch(e) { console.error(e); }
-        setProfileDone(true);
-        loadData(user.id);
-      }}
-    />
-  );
 
   // Invite code gate — show join screen before main app if URL has ?join=
   if(user && inviteCode) return (
@@ -2627,22 +2820,25 @@ export default function App(){
                   <Icon d={Icons.cloud} size={11} stroke="currentColor"/> Syncing…
                 </div>
               )}
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
-                  maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {user?.email}
+              <button onClick={()=>setTab("profile")} style={{
+                display:"flex",alignItems:"center",gap:6,
+                background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
+                borderRadius:8,padding:"4px 10px 4px 6px",cursor:"pointer",transition:"all 0.15s",
+              }}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}
+                onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.04)"}
+              >
+                <div style={{width:22,height:22,borderRadius:6,
+                  background:`radial-gradient(circle at 35% 35%,${getRank(calcXP(quests)).color}40,${getRank(calcXP(quests)).color}10)`,
+                  border:`1.5px solid ${getRank(calcXP(quests)).color}50`,
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>
+                  {getCharacter(members.find(m=>m.user_id===user?.id)?.name||"?").avatar}
+                </div>
+                <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",
+                  maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {members.find(m=>m.user_id===user?.id)?.display_name||user?.email?.split("@")[0]||"Profile"}
                 </span>
-                <button onClick={handleSignOut} style={{
-                  fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",
-                  background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
-                  borderRadius:6,padding:"3px 8px",cursor:"pointer",fontWeight:600,
-                  transition:"all 0.15s",
-                }}
-                  onMouseEnter={e=>{e.currentTarget.style.color="#fff";e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.color="rgba(255,255,255,0.3)";e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";}}>
-                  Sign out
-                </button>
-              </div>
+              </button>
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
@@ -2827,7 +3023,19 @@ export default function App(){
         )}
 
         {tab==="friends"&&(
-          <FriendsPage user={user} quests={quests}/>
+          <FriendsPage user={user} quests={quests} onFriendsLoaded={f=>setFriends(f)}/>
+        )}
+
+        {tab==="profile"&&(
+          <ProfilePage
+            user={user}
+            quests={quests}
+            onSignOut={handleSignOut}
+            onNameChange={(n)=>{
+              // Update members list with new name
+              setMembers(prev=>prev.map(m=>m.user_id===user.id?{...m,name:n,display_name:n}:m));
+            }}
+          />
         )}
 
         {tab==="completed"&&(
@@ -2891,7 +3099,7 @@ export default function App(){
         </button>
       )}
 
-      {questModal&&<QuestModal quest={questModal} onSave={saveQuest} onClose={()=>setQuestModal(null)}/>}
+      {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
       {inviteBoard&&<InviteModal board={inviteBoard} onClose={()=>setInviteBoard(null)}/>}
       {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
