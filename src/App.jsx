@@ -252,8 +252,24 @@ const sb = {
     const d = await r.json(); return Array.isArray(d)?d:[];
   },
   async getBoardMembers(boardId) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/board_members?board_id=eq.${boardId}&select=user_id`, {headers:this.h});
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/board_members?board_id=eq.${boardId}&select=user_id,joined_at`, {headers:this.h});
     const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+  async getBoardMemberProfiles(boardId) {
+    const members = await this.getBoardMembers(boardId);
+    if(!members.length) return [];
+    const profiles = await Promise.all(members.map(async m=>{
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/find_user_by_id`,{
+          method:"POST",headers:{...this.h,"Content-Type":"application/json"},
+          body:JSON.stringify({search_id:m.user_id})
+        });
+        const d = await r.json();
+        const p = Array.isArray(d)?d[0]:d;
+        return p ? {...p, joined_at:m.joined_at} : null;
+      } catch { return null; }
+    }));
+    return profiles.filter(Boolean);
   },
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -1823,15 +1839,23 @@ function JoinBoardScreen({ inviteCode, user, onJoined, onSkip }) {
 
 // ─── BOARD DETAIL PAGE ────────────────────────────────────────────────────────
 function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest, onDeleteQuest, onInvite, friends=[] }) {
-  const [boardQuests, setBoardQuests] = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [questModal, setQuestModal]   = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [boardQuests, setBoardQuests]     = useState([]);
+  const [boardMembers, setBoardMembers]   = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [questModal, setQuestModal]       = useState(null);
+  const [deleteTarget, setDeleteTarget]   = useState(null);
   const palette = getPalette(board.id);
 
   useEffect(()=>{
     setLoading(true);
-    sb.getBoardQuests(board.id).then(q=>{ setBoardQuests(q); setLoading(false); });
+    Promise.all([
+      sb.getBoardQuests(board.id),
+      sb.getBoardMemberProfiles(board.id),
+    ]).then(([q,m])=>{
+      setBoardQuests(q);
+      setBoardMembers(m);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
   },[board.id]);
 
   const saveQuest = async(q) => {
@@ -1880,13 +1904,54 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
           </button>
         </div>
         <div style={{marginTop:14,display:"flex",gap:14}}>
-          {[{l:"Quests",v:boardQuests.length,c:"#F0F0F0"},{l:"Active",v:counts["Active"]||0,c:"#A8FF78"},{l:"Done",v:counts["Completed"]||0,c:"#78C1FF"}].map(({l,v,c})=>(
+          {[{l:"Quests",v:boardQuests.length,c:"#F0F0F0"},{l:"Active",v:counts["Active"]||0,c:"#A8FF78"},{l:"Done",v:counts["Completed"]||0,c:"#78C1FF"},{l:"Members",v:boardMembers.length,c:palette.color}].map(({l,v,c})=>(
             <div key={l} style={{textAlign:"center"}}>
               <div style={{fontSize:20,fontWeight:700,color:c,fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
               <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:"0.08em",marginTop:3,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
             </div>
           ))}
         </div>
+
+        {/* Board members row */}
+        {boardMembers.length>0&&(
+          <div style={{marginTop:16,paddingTop:14,borderTop:`1px solid ${palette.color}15`}}>
+            <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+              color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+              Members
+            </p>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {boardMembers.map(m=>{
+                const {avatar,color}=getCharacter(m.name||"?");
+                const isMe = m.user_id === user?.id;
+                return(
+                  <div key={m.user_id} style={{display:"flex",alignItems:"center",gap:10,
+                    padding:"8px 12px",borderRadius:12,
+                    background:isMe?`${palette.color}08`:"rgba(255,255,255,0.03)",
+                    border:`1px solid ${isMe?palette.color+"25":"rgba(255,255,255,0.06)"}`}}>
+                    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
+                      background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                      border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
+                      justifyContent:"center",fontSize:18}}>{avatar}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
+                          fontFamily:"'Cormorant Garamond',serif"}}>{m.name}</span>
+                        {isMe&&<span style={{fontSize:9,fontWeight:700,color:palette.color,
+                          background:`${palette.color}15`,border:`1px solid ${palette.color}30`,
+                          padding:"1px 5px",borderRadius:4,letterSpacing:"0.06em"}}>YOU</span>}
+                      </div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginTop:1}}>
+                        Joined {new Date(m.joined_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                      </div>
+                    </div>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:"#A8FF78",flexShrink:0,
+                      boxShadow:"0 0 6px rgba(168,255,120,0.6)"}}/>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Quest list */}
