@@ -18,11 +18,14 @@ const sb = {
   },
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  async signUp(email, password) {
+  async signUp(email, password, displayName="") {
     const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
       method:"POST",
       headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY},
-      body:JSON.stringify({email,password}),
+      body:JSON.stringify({
+        email, password,
+        data: { display_name: displayName }
+      }),
     });
     const d = await r.json();
     if(d.error) throw new Error(d.error.message||d.msg||"Sign up failed");
@@ -41,6 +44,10 @@ const sb = {
     this._token = d.access_token;
     localStorage.setItem("sq_token", d.access_token);
     localStorage.setItem("sq_refresh", d.refresh_token);
+    // Cache the display name
+    if(d.user?.user_metadata?.display_name) {
+      localStorage.setItem("sq_name", d.user.user_metadata.display_name);
+    }
     return d;
   },
 
@@ -78,7 +85,10 @@ const sb = {
       const payload = JSON.parse(atob(token.split(".")[1]));
       if(payload.exp * 1000 < Date.now()) return null;
       this._token = token;
-      return { id: payload.sub, email: payload.email };
+      const name = payload.user_metadata?.display_name
+        || payload.raw_user_meta_data?.display_name
+        || null;
+      return { id: payload.sub, email: payload.email, name };
     } catch { return null; }
   },
 
@@ -2276,12 +2286,12 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
   const completedCount = quests.filter(q=>q.status==="Completed").length;
 
   useEffect(()=>{
-    // Load current name
-    sb.getAll("members", user.id).then(m=>{
-      const me = Array.isArray(m)?m.find(x=>x.user_id===user.id):null;
-      if(me) setName(me.display_name||me.name||"");
-      setLoading(false);
-    }).catch(()=>setLoading(false));
+    // Load name from auth metadata (the source of truth)
+    const authName = sb.getUser()?.name
+      || localStorage.getItem("sq_name")
+      || user.email?.split("@")[0]||"";
+    setName(authName);
+    setLoading(false);
   },[]);
 
   const saveName = async() => {
@@ -2388,32 +2398,27 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
         )}
       </div>
 
-      {/* Edit name */}
+      {/* Name display — locked at signup */}
       <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
         borderRadius:16,padding:"18px 18px",marginBottom:16}}>
         <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
           color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
-          Display Name
+          Account
         </p>
-        <div style={{display:"flex",gap:8}}>
-          <input value={name} onChange={e=>setName(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&saveName()}
-            placeholder="Your name…"
-            style={{flex:1,background:"rgba(255,255,255,0.05)",
-              border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,
-              padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
-              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"}}/>
-          <button onClick={saveName} disabled={!name.trim()||saving} style={{
-            padding:"0 18px",borderRadius:10,border:"none",cursor:"pointer",
-            background:saved?"rgba(168,255,120,0.15)":"rgba(255,255,255,0.1)",
-            color:saved?"#A8FF78":"rgba(255,255,255,0.7)",
-            fontSize:13,fontWeight:700,fontFamily:"'DM Sans',sans-serif",flexShrink:0,
-            transition:"all 0.2s"}}>
-            {saving?"…":saved?"Saved!":"Save"}
-          </button>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Name</span>
+            <span style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.7)",fontFamily:"'DM Sans',sans-serif"}}>{name||user.email?.split("@")[0]}</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Email</span>
+            <span style={{fontSize:13,color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif"}}>{user.email}</span>
+          </div>
+          <p style={{fontSize:11,color:"rgba(255,255,255,0.15)",margin:"4px 0 0",
+            fontFamily:"'DM Sans',sans-serif",fontStyle:"italic"}}>
+            Name is set at signup and cannot be changed.
+          </p>
         </div>
-        <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"6px 0 0",
-          fontFamily:"'DM Sans',sans-serif"}}>Signed in as {user.email}</p>
       </div>
 
       {/* Sign out */}
@@ -2771,17 +2776,19 @@ function MemoryForm({ initial, date, onSave }) {
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
   const [email, setEmail]     = useState("");
+  const [name, setName]       = useState("");
   const [password, setPassword] = useState("");
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
-  const [done, setDone]       = useState(false); // signup confirmation
+  const [done, setDone]       = useState(false);
 
   const submit = async () => {
     if(!email.trim()||!password.trim()) return;
+    if(mode==="signup"&&!name.trim()){ setError("Please enter your name."); return; }
     setLoading(true); setError("");
     try {
       if(mode==="signup") {
-        await sb.signUp(email.trim(), password);
+        await sb.signUp(email.trim(), password, name.trim());
         setDone(true);
       } else {
         const d = await sb.signIn(email.trim(), password);
@@ -2879,6 +2886,13 @@ function AuthScreen({ onAuth }) {
 
           {/* Inputs */}
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {mode==="signup"&&(
+              <input value={name} onChange={e=>setName(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&submit()}
+                type="text" placeholder="Your name (can't be changed later)" style={inp}
+                onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.3)"}
+                onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.12)"}/>
+            )}
             <input value={email} onChange={e=>setEmail(e.target.value)}
               onKeyDown={e=>e.key==="Enter"&&submit()}
               type="email" placeholder="Email address" style={inp}
@@ -2970,17 +2984,33 @@ export default function App(){
   },[]);
 
   const ensureUserMember = async(userId, email, existingMembers) => {
+    // Get name from auth metadata (set at signup) or localStorage cache
+    const authName = sb.getUser()?.name
+      || localStorage.getItem("sq_name")
+      || email.split("@")[0];
+
     const existing = existingMembers.find(m => m.user_id === userId);
     if(existing) {
-      // Profile exists — check if they have a real display name
-      if(existing.display_name || (existing.name && !existing.name.includes("@"))) {
-        setProfileDone(true);
+      // Update name from auth metadata if it changed
+      if(existing.name !== authName && authName !== email.split("@")[0]) {
+        const updated = {...existing, name:authName, display_name:authName};
+        try { await sb.upsert("members", updated); } catch{}
+        return existingMembers.map(m=>m.user_id===userId?updated:m);
       }
       return existingMembers;
     }
-    // No profile yet — will show setup screen
-    setProfileDone(false);
-    return existingMembers;
+    // Create member record with auth name
+    const member = {
+      id: crypto.randomUUID(),
+      name: authName,
+      display_name: authName,
+      email,
+      user_id: userId,
+      note: "Account owner",
+      created_at: new Date().toISOString(),
+    };
+    try { await sb.upsert("members", member); } catch(e){ console.error(e); }
+    return [member, ...existingMembers];
   };
 
   const loadData = async(userId) => {
@@ -3207,7 +3237,7 @@ export default function App(){
                 </div>
                 <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",
                   maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {members.find(m=>m.user_id===user?.id)?.display_name||user?.email?.split("@")[0]||"Profile"}
+                  {sb.getUser()?.name||localStorage.getItem("sq_name")||user?.email?.split("@")[0]||"Profile"}
                 </span>
               </button>
             </div>
