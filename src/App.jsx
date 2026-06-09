@@ -2879,8 +2879,13 @@ function AuthScreen({ onAuth }) {
     setLoading(true); setError("");
     try {
       if(mode==="signup") {
-        await sb.signUp(email.trim(), password, name.trim());
-        setDone(true);
+        const d = await sb.signUp(email.trim(), password, name.trim());
+        // If we got a token back, confirmation is off — log them in directly
+        if(d.access_token) {
+          onAuth({ id: d.user?.id||sb.getUser()?.id, email: email.trim() });
+        } else {
+          setDone(true); // confirmation email sent
+        }
       } else {
         const d = await sb.signIn(email.trim(), password);
         onAuth({ id: d.user?.id||sb.getUser()?.id, email: email.trim() });
