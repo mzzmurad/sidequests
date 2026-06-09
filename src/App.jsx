@@ -2879,16 +2879,10 @@ function AuthScreen({ onAuth }) {
     setLoading(true); setError("");
     try {
       if(mode==="signup") {
-        const d = await sb.signUp(email.trim(), password, name.trim());
-        // Always try to sign in immediately after signup
-        // This works whether confirmation is on or off
-        try {
-          const s = await sb.signIn(email.trim(), password);
-          onAuth({ id: s.user?.id, email: email.trim() });
-        } catch(e) {
-          // If sign in fails, confirmation email was sent
-          setDone(true);
-        }
+        await sb.signUp(email.trim(), password, name.trim());
+        // After signup, switch to signin mode with credentials pre-filled
+        setMode("signin");
+        setError("Account created! Now sign in below.");
       } else {
         const d = await sb.signIn(email.trim(), password);
         onAuth({ id: d.user?.id||sb.getUser()?.id, email: email.trim() });
@@ -2911,19 +2905,18 @@ function AuthScreen({ onAuth }) {
     <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",
       justifyContent:"center",padding:24,fontFamily:"'DM Sans',sans-serif"}}>
       <div style={{maxWidth:360,width:"100%",textAlign:"center",animation:"cardIn 0.5s ease both"}}>
-        <div style={{fontSize:56,marginBottom:20}}>📬</div>
+        <div style={{fontSize:56,marginBottom:20}}>✅</div>
         <h2 style={{fontSize:22,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif",marginBottom:12}}>
-          Check your email
+          Account created!
         </h2>
         <p style={{fontSize:14,color:"rgba(255,255,255,0.4)",lineHeight:1.7,marginBottom:24}}>
-          We sent a confirmation link to <strong style={{color:"rgba(255,255,255,0.7)"}}>{email}</strong>.
-          Click it to activate your account, then come back and sign in.
+          Sign in with your email and password to get started.
         </p>
         <button onClick={()=>{setDone(false);setMode("signin");}} style={{
-          padding:"13px 28px",borderRadius:14,border:"1px solid rgba(255,255,255,0.12)",
-          background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.7)",
-          cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
-          Back to Sign In
+          background:"linear-gradient(135deg,#e8e8e8,#fff)",color:"#0A0A0C",
+          border:"none",borderRadius:14,padding:"14px 28px",
+          cursor:"pointer",fontSize:15,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+          Sign In Now
         </button>
       </div>
     </div>
@@ -3006,9 +2999,12 @@ function AuthScreen({ onAuth }) {
 
           {/* Error */}
           {error&&(
-            <div style={{padding:"10px 14px",borderRadius:10,background:"rgba(255,100,100,0.08)",
-              border:"1px solid rgba(255,100,100,0.2)",fontSize:12.5,
-              color:"rgba(255,150,150,0.9)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}>
+            <div style={{padding:"10px 14px",borderRadius:10,
+              background:error.includes("created")?"rgba(168,255,120,0.08)":"rgba(255,100,100,0.08)",
+              border:`1px solid ${error.includes("created")?"rgba(168,255,120,0.2)":"rgba(255,100,100,0.2)"}`,
+              fontSize:12.5,
+              color:error.includes("created")?"rgba(168,255,120,0.9)":"rgba(255,150,150,0.9)",
+              fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}>
               {error}
             </div>
           )}
