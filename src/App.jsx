@@ -1776,7 +1776,7 @@ function JoinBoardScreen({ inviteCode, user, onJoined, onSkip }) {
 }
 
 // ─── BOARD DETAIL PAGE ────────────────────────────────────────────────────────
-function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest, onDeleteQuest, onInvite }) {
+function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest, onDeleteQuest, onInvite, friends=[] }) {
   const [boardQuests, setBoardQuests] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [questModal, setQuestModal]   = useState(null);
@@ -2556,7 +2556,7 @@ function AuthScreen({ onAuth }) {
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App(){
   const [user,setUser]           = useState(undefined);
-  const [profileDone,setProfileDone] = useState(false);
+
   const [quests,setQuests]       = useState([]);
   const [members,setMembers]     = useState([]);
   const [boards,setBoards]       = useState([]);
@@ -2978,7 +2978,7 @@ export default function App(){
           <div style={{position:"relative"}}>
             <BoardDetailPage
               board={activeBoard} user={user} members={members}
-              allQuests={quests}
+              allQuests={quests} friends={friends}
               onBack={()=>setActiveBoard(null)}
               onSaveQuest={saveBoardQuest}
               onDeleteQuest={deleteBoardQuest}
