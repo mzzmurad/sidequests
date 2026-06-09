@@ -117,27 +117,43 @@ const sb = {
     });
   },
   async getFriendProfiles(userId) {
-    // Get all accepted friendships and their member profiles
+    // Get ALL friendships first (don't bail early!)
     const ships = await this.getFriendships(userId);
+
+    // Split by status
     const accepted = ships.filter(s=>s.status==="accepted");
-    if(accepted.length===0) return {friends:[], pending:[], incoming:[]};
-    const friendIds = accepted.map(s=>s.from_id===userId?s.to_id:s.from_id);
+    const pending  = ships.filter(s=>s.status==="pending" && s.from_id===userId);
+    const incoming = ships.filter(s=>s.status==="pending" && s.to_id===userId);
+
+    // Load accepted friend profiles
     let friends = [];
-    if(friendIds.length>0) {
+    if(accepted.length>0) {
+      const friendIds = accepted.map(s=>s.from_id===userId?s.to_id:s.from_id);
       const r = await fetch(`${SUPABASE_URL}/rest/v1/members?user_id=in.(${friendIds.join(",")})`, {headers:this.h});
-      friends = await r.json();
+      const d = await r.json();
+      friends = Array.isArray(d)?d:[];
     }
-    const pending  = ships.filter(s=>s.status==="pending"&&s.from_id===userId);
-    const incoming = ships.filter(s=>s.status==="pending"&&s.to_id===userId);
-    // Get incoming requester profiles
+
+    // Load incoming requester profiles via RPC (to get their name+email from auth)
     let incomingProfiles = [];
     if(incoming.length>0) {
-      const ids = incoming.map(s=>s.from_id);
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/members?user_id=in.(${ids.join(",")})`, {headers:this.h});
-      const profiles = await r.json();
-      incomingProfiles = incoming.map(s=>({...s, profile: profiles.find(p=>p.user_id===s.from_id)}));
+      incomingProfiles = await Promise.all(incoming.map(async s=>{
+        try {
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/find_user_by_id`, {
+            method:"POST",
+            headers:{...this.h,"Content-Type":"application/json"},
+            body:JSON.stringify({search_id: s.from_id})
+          });
+          const profile = await r.json();
+          const p = Array.isArray(profile)?profile[0]:profile;
+          return {...s, profile: p||{name:"Unknown",email:""}};
+        } catch {
+          return {...s, profile:{name:"Unknown",email:""}};
+        }
+      }));
     }
-    return {friends:Array.isArray(friends)?friends:[], pending, incoming:incomingProfiles};
+
+    return {friends, pending, incoming:incomingProfiles};
   },
 
   // ── Boards ────────────────────────────────────────────────────────────────
@@ -1890,7 +1906,12 @@ function FriendsPage({ user, quests, onAddToQuest }) {
     setLoading(false);
   };
 
-  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{
+    load();
+    // Auto-refresh every 10s to catch new incoming requests
+    const interval = setInterval(load, 10000);
+    return ()=>clearInterval(interval);
+  },[]);
 
   const sendRequest = async() => {
     if(!email.trim()) return;
@@ -2209,6 +2230,7 @@ export default function App(){
   const [quests,setQuests]       = useState([]);
   const [members,setMembers]     = useState([]);
   const [boards,setBoards]       = useState([]);
+  const [friendRequestCount,setFriendRequestCount] = useState(0);
   const [activeBoard,setActiveBoard] = useState(null); // board being viewed
   const [inviteBoard,setInviteBoard] = useState(null); // board to show invite modal for
   const [showCreateBoard,setShowCreateBoard] = useState(false);
@@ -2387,10 +2409,25 @@ export default function App(){
   const userXP = calcXP(quests);
   const userRank = getRank(userXP);
 
+  // Poll for friend requests every 15s to show badge
+  useEffect(()=>{
+    if(!user) return;
+    const check = async()=>{
+      try {
+        const ships = await sb.getFriendships(user.id);
+        const incoming = ships.filter(s=>s.status==="pending"&&s.to_id===user.id);
+        setFriendRequestCount(incoming.length);
+      } catch{}
+    };
+    check();
+    const iv = setInterval(check, 15000);
+    return ()=>clearInterval(iv);
+  },[user]);
+
   const TABS=[
     {id:"quests",   label:"Quests",   icon:Icons.shield, count:personalQuests.length},
     {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length},
-    {id:"friends",  label:"Friends",  icon:Icons.users,  count:0},
+    {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
   ];
