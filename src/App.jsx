@@ -204,6 +204,29 @@ const sb = {
     return {friends, pending, incoming:incomingProfiles};
   },
 
+  // ── Reactions ────────────────────────────────────────────────────────────
+  async getReactions(questId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/reactions?quest_id=eq.${questId}`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+  async toggleReaction(questId, userId, emoji) {
+    // Check if reaction exists
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/reactions?quest_id=eq.${questId}&user_id=eq.${userId}&emoji=eq.${encodeURIComponent(emoji)}`, {headers:this.h});
+    const existing = await r.json();
+    if(Array.isArray(existing) && existing.length > 0) {
+      // Remove it
+      await fetch(`${SUPABASE_URL}/rest/v1/reactions?id=eq.${existing[0].id}`, {method:"DELETE", headers:this.h});
+      return false; // removed
+    } else {
+      // Add it
+      await fetch(`${SUPABASE_URL}/rest/v1/reactions`, {
+        method:"POST", headers:{...this.h,"Prefer":"return=minimal"},
+        body:JSON.stringify({id:crypto.randomUUID(), quest_id:questId, user_id:userId, emoji, created_at:new Date().toISOString()})
+      });
+      return true; // added
+    }
+  },
+
   // ── Memories ─────────────────────────────────────────────────────────────
   async getMemories(userId) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&order=date.desc,created_at.desc`, {headers:this.h});
@@ -1969,10 +1992,17 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
           <p style={{fontSize:15,color:"rgba(255,255,255,0.2)",lineHeight:1.7}}>No quests yet.<br/>Add the first one!</p>
         </div>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
           {boardQuests.map((q,i)=>(
-            <QuestCard key={q.id} quest={q} members={members} index={i}
-              onEdit={q=>setQuestModal(q)} onDelete={id=>setDeleteTarget(id)}/>
+            <div key={q.id}>
+              <QuestCard quest={q} members={members} index={i}
+                onEdit={q=>setQuestModal(q)} onDelete={id=>setDeleteTarget(id)}/>
+              {/* Reactions row */}
+              <div style={{padding:"8px 12px 0",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>React:</span>
+                <QuestReactions questId={q.id} userId={user?.id}/>
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -2490,6 +2520,9 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
         )}
       </div>
 
+      {/* Lifetime stats */}
+      <LifetimeStats user={user} quests={quests}/>
+
       {/* Name display — locked at signup */}
       <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
         borderRadius:16,padding:"18px 18px",marginBottom:16}}>
@@ -2863,6 +2896,133 @@ function MemoryForm({ initial, date, onSave }) {
   );
 }
 
+
+
+// ─── LIFETIME STATS ───────────────────────────────────────────────────────────
+function LifetimeStats({ user, quests }) {
+  const [memories, setMemories] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(()=>{
+    sb.getMemories(user.id).then(m=>{ setMemories(m||[]); setLoading(false); }).catch(()=>setLoading(false));
+  },[]);
+
+  const completed   = quests.filter(q=>q.status==="Completed").length;
+  const personal    = quests.filter(q=>!q.board_id).length;
+  const shared      = quests.filter(q=>!!q.board_id).length;
+  const withPhotos  = quests.filter(q=>q.photo).length;
+  const withLocation= quests.filter(q=>q.location?.name).length;
+  const memCount    = memories.length;
+  const memPhotos   = memories.filter(m=>m.photo).length;
+
+  // Extract unique countries/cities from quest locations
+  const locations   = quests.filter(q=>q.location?.name).map(q=>q.location.name);
+  const uniquePlaces= [...new Set(locations)].length;
+
+  // Streak — longest consecutive days with completed quests
+  const completedDates = [...new Set(
+    quests.filter(q=>q.completed_at).map(q=>q.completed_at.slice(0,10))
+  )].sort();
+  let maxStreak=0, curStreak=0;
+  for(let i=0;i<completedDates.length;i++){
+    if(i===0){ curStreak=1; }
+    else {
+      const prev=new Date(completedDates[i-1]);
+      const cur=new Date(completedDates[i]);
+      const diff=(cur-prev)/(1000*60*60*24);
+      curStreak = diff===1 ? curStreak+1 : 1;
+    }
+    maxStreak=Math.max(maxStreak,curStreak);
+  }
+
+  const stats = [
+    {icon:"⚔",  label:"Total Quests",    value:quests.length,   color:"#F0F0F0"},
+    {icon:"🏆",  label:"Completed",       value:completed,        color:"#78C1FF"},
+    {icon:"🔒",  label:"Personal",        value:personal,         color:"#A8FF78"},
+    {icon:"🤝",  label:"Shared",          value:shared,           color:"#C084FC"},
+    {icon:"📍",  label:"Places Visited",  value:uniquePlaces,     color:"#FBBF24"},
+    {icon:"📸",  label:"Quest Photos",    value:withPhotos,       color:"#F472B6"},
+    {icon:"📖",  label:"Memories",        value:memCount,         color:"#E879F9"},
+    {icon:"🖼",  label:"Memory Photos",   value:memPhotos,        color:"#2DD4BF"},
+    {icon:"🔥",  label:"Best Streak",     value:`${maxStreak}d`,  color:"#FB923C"},
+  ];
+
+  return(
+    <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
+      borderRadius:16,padding:"18px",marginBottom:16}}>
+      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+        color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:14}}>
+        Lifetime Stats
+      </p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+        {stats.map(({icon,label,value,color})=>(
+          <div key={label} style={{background:"rgba(255,255,255,0.03)",
+            border:`1px solid ${color}20`,borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
+            <div style={{fontSize:20,marginBottom:4}}>{icon}</div>
+            <div style={{fontSize:18,fontWeight:700,color,fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{value}</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:"0.06em",
+              marginTop:4,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase",lineHeight:1.3}}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── QUEST REACTIONS ─────────────────────────────────────────────────────────
+const REACTION_EMOJIS = ["🔥","❤","👏","😮","😂","💀"];
+
+function QuestReactions({ questId, userId }) {
+  const [reactions, setReactions] = useState([]);
+  const [loading, setLoading]     = useState(true);
+
+  useEffect(()=>{
+    load();
+  },[questId]);
+
+  const load = async() => {
+    try {
+      const r = await sb.getReactions(questId);
+      setReactions(r);
+    } catch(e){ console.error(e); }
+    setLoading(false);
+  };
+
+  const toggle = async(emoji) => {
+    try {
+      await sb.toggleReaction(questId, userId, emoji);
+      await load();
+    } catch(e){ console.error(e); }
+  };
+
+  // Group reactions by emoji
+  const grouped = REACTION_EMOJIS.map(emoji=>({
+    emoji,
+    count: reactions.filter(r=>r.emoji===emoji).length,
+    mine:  reactions.some(r=>r.emoji===emoji && r.user_id===userId),
+  })).filter(g=>g.count>0||true);
+
+  return(
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+      {grouped.map(({emoji,count,mine})=>(
+        <button key={emoji} onClick={()=>toggle(emoji)} style={{
+          display:"flex",alignItems:"center",gap:4,
+          padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",
+          background:mine?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.04)",
+          outline:mine?"1px solid rgba(255,255,255,0.2)":"none",
+          transition:"all 0.15s",
+        }}
+          onMouseEnter={e=>e.currentTarget.style.background=mine?"rgba(255,255,255,0.16)":"rgba(255,255,255,0.08)"}
+          onMouseLeave={e=>e.currentTarget.style.background=mine?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.04)"}
+        >
+          <span style={{fontSize:16}}>{emoji}</span>
+          {count>0&&<span style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.6)",
+            fontFamily:"'DM Sans',sans-serif"}}>{count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
