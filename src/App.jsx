@@ -332,6 +332,10 @@ const sb = {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/board_members?board_id=eq.${boardId}&select=user_id,joined_at`, {headers:this.h});
     const d = await r.json(); return Array.isArray(d)?d:[];
   },
+  async leaveBoard(boardId, userId) {
+    await fetch(`${SUPABASE_URL}/rest/v1/board_members?board_id=eq.${boardId}&user_id=eq.${userId}`,
+      {method:"DELETE", headers:this.h});
+  },
   async getBoardMemberProfiles(boardId) {
     const members = await this.getBoardMembers(boardId);
     if(!members.length) return [];
@@ -1992,13 +1996,14 @@ function JoinBoardScreen({ inviteCode, user, onJoined, onSkip }) {
 }
 
 // ─── BOARD DETAIL PAGE ────────────────────────────────────────────────────────
-function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest, onDeleteQuest, onInvite, friends=[] }) {
+function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest, onDeleteQuest, onInvite, onLeave, friends=[] }) {
   const [boardQuests, setBoardQuests]     = useState([]);
   const [boardMembers, setBoardMembers]   = useState([]);
   const [loading, setLoading]             = useState(true);
   const [questModal, setQuestModal]       = useState(null);
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const palette = getPalette(board.id);
+  const isCreator = board.created_by === user?.id;
 
   useEffect(()=>{
     setLoading(true);
@@ -2050,12 +2055,21 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
             </h2>
             {board.description&&<p style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>{board.description}</p>}
           </div>
-          <button onClick={onInvite} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
-            borderRadius:12,border:`1px solid ${palette.color}40`,background:`${palette.color}10`,
-            color:palette.color,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
-            flexShrink:0,whiteSpace:"nowrap"}}>
-            <Icon d={Icons.link} size={13} stroke="currentColor"/> Invite
-          </button>
+          <div style={{display:"flex",gap:8,flexShrink:0}}>
+            <button onClick={onInvite} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
+              borderRadius:12,border:`1px solid ${palette.color}40`,background:`${palette.color}10`,
+              color:palette.color,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+              whiteSpace:"nowrap"}}>
+              <Icon d={Icons.link} size={13} stroke="currentColor"/> Invite
+            </button>
+            <button onClick={onLeave} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 12px",
+              borderRadius:12,border:"1px solid rgba(255,80,80,0.25)",background:"rgba(255,80,80,0.08)",
+              color:"#FF7878",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+              whiteSpace:"nowrap"}}>
+              <Icon d={Icons.trash} size={13} stroke="currentColor"/>
+              {isCreator?"Delete":"Leave"}
+            </button>
+          </div>
         </div>
         <div style={{marginTop:14,display:"flex",gap:14}}>
           {[{l:"Quests",v:boardQuests.length,c:"#F0F0F0"},{l:"Active",v:counts["Active"]||0,c:"#A8FF78"},{l:"Done",v:counts["Completed"]||0,c:"#78C1FF"},{l:"Members",v:boardMembers.length,c:palette.color}].map(({l,v,c})=>(
@@ -3531,6 +3545,23 @@ export default function App(){
     try { await sb.delete("quests", id); } catch(e) { console.error(e); }
   };
 
+  const handleLeaveBoard = async(board) => {
+    const isCreator = board.created_by === user?.id;
+    const msg = isCreator
+      ? `Delete "${board.name}"? This will remove the board and all its quests for everyone.`
+      : `Leave "${board.name}"?`;
+    if(!window.confirm(msg)) return;
+    try {
+      if(isCreator) {
+        await sb.delete("boards", board.id);
+      } else {
+        await sb.leaveBoard(board.id, user.id);
+      }
+      setBoards(prev=>prev.filter(b=>b.id!==board.id));
+      setActiveBoard(null);
+    } catch(e) { console.error(e); }
+  };
+
   const handleJoinedBoard = (board) => {
     setBoards(prev=>[...prev.filter(b=>b.id!==board.id), board]);
     setInviteCode(null);
@@ -3857,6 +3888,7 @@ export default function App(){
               onSaveQuest={saveBoardQuest}
               onDeleteQuest={deleteBoardQuest}
               onInvite={()=>setInviteBoard(activeBoard)}
+              onLeave={()=>handleLeaveBoard(activeBoard)}
             />
           </div>
         )}
