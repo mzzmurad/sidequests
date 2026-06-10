@@ -223,6 +223,23 @@ const sb = {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/board_invites?to_id=eq.${userId}&status=eq.pending`, {headers:this.h});
     const invites = await r.json();
     if(!Array.isArray(invites) || invites.length===0) return [];
+    // Also check which boards user is already a member of
+    const memberCheck = await fetch(`${SUPABASE_URL}/rest/v1/board_members?user_id=eq.${userId}&select=board_id`, {headers:this.h});
+    const memberships = await memberCheck.json();
+    const memberBoardIds = Array.isArray(memberships)?memberships.map(m=>m.board_id):[];
+    // Filter out invites for boards user already joined + auto-clean stale pending invites
+    const validInvites = invites.filter(inv=>!memberBoardIds.includes(inv.board_id));
+    // Auto-mark stale invites as accepted if user is already a member
+    const stale = invites.filter(inv=>memberBoardIds.includes(inv.board_id));
+    if(stale.length>0) {
+      await Promise.all(stale.map(inv=>
+        fetch(`${SUPABASE_URL}/rest/v1/board_invites?id=eq.${inv.id}`,{
+          method:"PATCH",headers:{...this.h,"Content-Type":"application/json"},
+          body:JSON.stringify({status:"accepted"})
+        }).catch(()=>{})
+      ));
+    }
+    if(validInvites.length===0) return [];
     // Get board details for each invite
     return Promise.all(invites.map(async inv=>{
       try {
@@ -242,14 +259,17 @@ const sb = {
   },
   async respondBoardInvite(inviteId, boardId, userId, accept) {
     // Update invite status
-    await fetch(`${SUPABASE_URL}/rest/v1/board_invites?id=eq.${inviteId}`, {
-      method:"PATCH", headers:{...this.h,"Content-Type":"application/json"},
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/board_invites?id=eq.${inviteId}`, {
+      method:"PATCH",
+      headers:{...this.h,"Content-Type":"application/json","Prefer":"return=minimal"},
       body:JSON.stringify({status: accept?"accepted":"declined"})
     });
+    if(!r.ok) console.error("invite update failed", r.status, await r.text());
     // If accepted, add to board members
     if(accept) {
       await fetch(`${SUPABASE_URL}/rest/v1/board_members`, {
-        method:"POST", headers:{...this.h,"Prefer":"resolution=ignore-duplicates"},
+        method:"POST",
+        headers:{...this.h,"Prefer":"resolution=ignore-duplicates"},
         body:JSON.stringify({id:crypto.randomUUID(), board_id:boardId, user_id:userId, joined_at:new Date().toISOString()})
       });
     }
