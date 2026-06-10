@@ -39,10 +39,6 @@ const sb = {
         throw new Error("Signups are disabled. Contact the app owner.");
       throw new Error(msg||"Sign up failed. Please try again.");
     }
-    // Check if user was actually created
-    if(!d.user && !d.access_token) {
-      throw new Error("Sign up failed — no user returned. Try again.");
-    }
     if(d.access_token) this._token = d.access_token;
     return d;
   },
@@ -2886,10 +2882,14 @@ function AuthScreen({ onAuth }) {
     setLoading(true); setError("");
     try {
       if(mode==="signup") {
-        await sb.signUp(email.trim(), password, name.trim());
-        // After signup, switch to signin mode with credentials pre-filled
-        setMode("signin");
-        setError("Account created! Now sign in below.");
+        const d = await sb.signUp(email.trim(), password, name.trim());
+        if(d.access_token) {
+          // Email confirmation off — log in directly
+          onAuth({ id: d.user?.id, email: email.trim() });
+        } else {
+          // Email confirmation on — show success and switch to sign in
+          setDone(true);
+        }
       } else {
         const d = await sb.signIn(email.trim(), password);
         onAuth({ id: d.user?.id||sb.getUser()?.id, email: email.trim() });
@@ -2911,19 +2911,24 @@ function AuthScreen({ onAuth }) {
   if(done) return (
     <div style={{minHeight:"100vh",background:"#08080A",display:"flex",alignItems:"center",
       justifyContent:"center",padding:24,fontFamily:"'DM Sans',sans-serif"}}>
+      <style>{`body{background:#08080A;} @keyframes cardIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
       <div style={{maxWidth:360,width:"100%",textAlign:"center",animation:"cardIn 0.5s ease both"}}>
-        <div style={{fontSize:56,marginBottom:20}}>✅</div>
+        <div style={{fontSize:56,marginBottom:20}}>📬</div>
         <h2 style={{fontSize:22,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif",marginBottom:12}}>
-          Account created!
+          Check your email!
         </h2>
-        <p style={{fontSize:14,color:"rgba(255,255,255,0.4)",lineHeight:1.7,marginBottom:24}}>
-          Sign in with your email and password to get started.
+        <p style={{fontSize:14,color:"rgba(255,255,255,0.4)",lineHeight:1.7,marginBottom:8}}>
+          We sent a confirmation link to
+        </p>
+        <p style={{fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.8)",marginBottom:24}}>{email}</p>
+        <p style={{fontSize:13,color:"rgba(255,255,255,0.3)",lineHeight:1.6,marginBottom:24}}>
+          Click the link in your email to activate your account, then come back and sign in.
         </p>
         <button onClick={()=>{setDone(false);setMode("signin");}} style={{
           background:"linear-gradient(135deg,#e8e8e8,#fff)",color:"#0A0A0C",
           border:"none",borderRadius:14,padding:"14px 28px",
           cursor:"pointer",fontSize:15,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
-          Sign In Now
+          Go to Sign In
         </button>
       </div>
     </div>
