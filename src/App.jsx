@@ -204,6 +204,57 @@ const sb = {
     return {friends, pending, incoming:incomingProfiles};
   },
 
+  // ── Board Invites ────────────────────────────────────────────────────────
+  async sendBoardInvite(boardId, fromUserId, toUserId) {
+    // Check not already a member
+    const check = await fetch(`${SUPABASE_URL}/rest/v1/board_members?board_id=eq.${boardId}&user_id=eq.${toUserId}`, {headers:this.h});
+    const existing = await check.json();
+    if(Array.isArray(existing) && existing.length > 0) throw new Error("Already a member");
+    // Check no pending invite
+    const checkInvite = await fetch(`${SUPABASE_URL}/rest/v1/board_invites?board_id=eq.${boardId}&to_id=eq.${toUserId}&status=eq.pending`, {headers:this.h});
+    const existingInvite = await checkInvite.json();
+    if(Array.isArray(existingInvite) && existingInvite.length > 0) throw new Error("Invite already sent");
+    await fetch(`${SUPABASE_URL}/rest/v1/board_invites`, {
+      method:"POST", headers:{...this.h,"Prefer":"return=minimal"},
+      body:JSON.stringify({id:crypto.randomUUID(), board_id:boardId, from_id:fromUserId, to_id:toUserId, status:"pending", created_at:new Date().toISOString()})
+    });
+  },
+  async getMyBoardInvites(userId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/board_invites?to_id=eq.${userId}&status=eq.pending`, {headers:this.h});
+    const invites = await r.json();
+    if(!Array.isArray(invites) || invites.length===0) return [];
+    // Get board details for each invite
+    return Promise.all(invites.map(async inv=>{
+      try {
+        const br = await fetch(`${SUPABASE_URL}/rest/v1/boards?id=eq.${inv.board_id}`, {headers:this.h});
+        const boards = await br.json();
+        const board = Array.isArray(boards)?boards[0]:null;
+        // Get sender name
+        const sr = await fetch(`${SUPABASE_URL}/rest/v1/rpc/find_user_by_id`,{
+          method:"POST", headers:{...this.h,"Content-Type":"application/json"},
+          body:JSON.stringify({search_id:inv.from_id})
+        });
+        const senderData = await sr.json();
+        const sender = Array.isArray(senderData)?senderData[0]:senderData;
+        return {...inv, board, sender};
+      } catch { return inv; }
+    }));
+  },
+  async respondBoardInvite(inviteId, boardId, userId, accept) {
+    // Update invite status
+    await fetch(`${SUPABASE_URL}/rest/v1/board_invites?id=eq.${inviteId}`, {
+      method:"PATCH", headers:{...this.h,"Content-Type":"application/json"},
+      body:JSON.stringify({status: accept?"accepted":"declined"})
+    });
+    // If accepted, add to board members
+    if(accept) {
+      await fetch(`${SUPABASE_URL}/rest/v1/board_members`, {
+        method:"POST", headers:{...this.h,"Prefer":"resolution=ignore-duplicates"},
+        body:JSON.stringify({id:crypto.randomUUID(), board_id:boardId, user_id:userId, joined_at:new Date().toISOString()})
+      });
+    }
+  },
+
   // ── Reactions ────────────────────────────────────────────────────────────
   async getReactions(questId) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/reactions?quest_id=eq.${questId}`, {headers:this.h});
@@ -1692,19 +1743,42 @@ function CreateBoardModal({ onSave, onClose }) {
   );
 }
 
-// ─── INVITE LINK MODAL ────────────────────────────────────────────────────────
-function InviteModal({ board, onClose }) {
-  const [copied,setCopied] = useState(false);
-  const [visible,setVisible] = useState(false);
-  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+// ─── INVITE MODAL ─────────────────────────────────────────────────────────────
+function InviteModal({ board, user, friends=[], onClose }) {
+  const [copied, setCopied]     = useState(false);
+  const [visible, setVisible]   = useState(false);
+  const [sending, setSending]   = useState({});
+  const [sent, setSent]         = useState({});
+  const [error, setError]       = useState("");
+  const [boardMembers, setBoardMembers] = useState([]);
+
+  useEffect(()=>{
+    requestAnimationFrame(()=>setVisible(true));
+    // Load current board members to exclude them
+    sb.getBoardMembers(board.id).then(m=>setBoardMembers(m||[])).catch(()=>{});
+  },[]);
+
   const close=()=>{ setVisible(false); setTimeout(onClose,250); };
   const link = `${window.location.origin}?join=${board.invite_code}`;
+  const copy = () => { navigator.clipboard.writeText(link).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }); };
 
-  const copy = () => {
-    navigator.clipboard.writeText(link).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+  const inviteFriend = async(friend) => {
+    setSending(s=>({...s,[friend.user_id]:true}));
+    setError("");
+    try {
+      await sb.sendBoardInvite(board.id, user.id, friend.user_id);
+      setSent(s=>({...s,[friend.user_id]:true}));
+    } catch(e) {
+      setError(e.message||"Could not send invite.");
+    }
+    setSending(s=>({...s,[friend.user_id]:false}));
   };
 
-  return (
+  // Friends not already in the board
+  const memberIds = boardMembers.map(m=>m.user_id);
+  const invitableFriends = friends.filter(f=>!memberIds.includes(f.user_id));
+
+  return(
     <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.72:0})`,
       backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
       justifyContent:"center",zIndex:1000,transition:"all 0.25s"}}
@@ -1714,8 +1788,9 @@ function InviteModal({ board, onClose }) {
         width:"100%",maxWidth:560,padding:"12px 24px 52px",
         display:"flex",flexDirection:"column",gap:20,
         transform:visible?"translateY(0)":"translateY(100%)",
-        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)"}}>
-        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
+        maxHeight:"85vh",overflowY:"auto"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0",flexShrink:0}}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
             Invite to {board.name}
@@ -1725,23 +1800,76 @@ function InviteModal({ board, onClose }) {
             <Icon d={Icons.x} size={16}/>
           </button>
         </div>
-        <p style={{margin:0,fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
-          Share this link. Anyone who opens it can join the board and see all shared quests.
-        </p>
-        {/* Link display */}
+
+        {/* Invite friends section */}
+        {invitableFriends.length>0&&(
+          <div>
+            <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+              color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+              Invite Friends
+            </p>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {invitableFriends.map(f=>{
+                const {avatar,color}=getCharacter(f.name||"?");
+                const isSent=sent[f.user_id];
+                const isSending=sending[f.user_id];
+                return(
+                  <div key={f.user_id} style={{display:"flex",alignItems:"center",gap:12,
+                    padding:"10px 14px",borderRadius:14,
+                    background:isSent?"rgba(168,255,120,0.06)":"rgba(255,255,255,0.03)",
+                    border:`1px solid ${isSent?"rgba(168,255,120,0.2)":"rgba(255,255,255,0.07)"}`}}>
+                    <div style={{width:38,height:38,borderRadius:10,flexShrink:0,
+                      background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                      border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
+                      justifyContent:"center",fontSize:20}}>{avatar}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:600,color:"#F0F0F0",fontFamily:"'DM Sans',sans-serif"}}>{f.name}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>{f.email}</div>
+                    </div>
+                    <button onClick={()=>!isSent&&inviteFriend(f)} disabled={isSent||isSending} style={{
+                      padding:"7px 14px",borderRadius:10,border:"none",cursor:isSent?"default":"pointer",
+                      background:isSent?"rgba(168,255,120,0.12)":"rgba(255,255,255,0.1)",
+                      color:isSent?"#A8FF78":"rgba(255,255,255,0.7)",
+                      fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+                      flexShrink:0,transition:"all 0.2s",opacity:isSending?0.5:1}}>
+                      {isSending?"…":isSent?"Sent!":"Invite"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {error&&<p style={{fontSize:12,color:"#FF7878",margin:"8px 0 0",fontFamily:"'DM Sans',sans-serif"}}>{error}</p>}
+          </div>
+        )}
+
+        {invitableFriends.length===0&&(
+          <p style={{fontSize:13,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+            {friends.length===0?"Add friends first in the Friends tab to invite them here.":"All your friends are already in this board!"}
+          </p>
+        )}
+
+        {/* Divider */}
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,height:1,background:"rgba(255,255,255,0.07)"}}/>
+          <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>or share link</span>
+          <div style={{flex:1,height:1,background:"rgba(255,255,255,0.07)"}}/>
+        </div>
+
+        {/* Link */}
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",
-          borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",gap:10}}>
-          <Icon d={Icons.link} size={15} stroke="rgba(255,255,255,0.3)"/>
-          <span style={{flex:1,fontSize:12.5,color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif",
+          borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",gap:10}}>
+          <Icon d={Icons.link} size={14} stroke="rgba(255,255,255,0.3)"/>
+          <span style={{flex:1,fontSize:11.5,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{link}</span>
         </div>
         <button onClick={copy} style={{
-          background:copied?"rgba(168,255,120,0.15)":"linear-gradient(135deg,#e8e8e8,#fff)",
-          color:copied?"#A8FF78":"#0A0A0C",border:copied?"1px solid rgba(168,255,120,0.3)":"none",
-          borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,cursor:"pointer",
+          background:copied?"rgba(168,255,120,0.15)":"rgba(255,255,255,0.08)",
+          color:copied?"#A8FF78":"rgba(255,255,255,0.6)",
+          border:copied?"1px solid rgba(168,255,120,0.3)":"1px solid rgba(255,255,255,0.1)",
+          borderRadius:14,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",
           fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",
           display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          <Icon d={Icons.copy} size={16} stroke="currentColor"/>
+          <Icon d={Icons.copy} size={15} stroke="currentColor"/>
           {copied?"Copied!":"Copy Invite Link"}
         </button>
       </div>
@@ -3231,6 +3359,7 @@ export default function App(){
   const [boards,setBoards]       = useState([]);
   const [friends,setFriends]     = useState([]);
   const [friendRequestCount,setFriendRequestCount] = useState(0);
+  const [boardInvites,setBoardInvites]             = useState([]);
   const [activeBoard,setActiveBoard] = useState(null); // board being viewed
   const [inviteBoard,setInviteBoard] = useState(null); // board to show invite modal for
   const [showCreateBoard,setShowCreateBoard] = useState(false);
@@ -3423,7 +3552,7 @@ export default function App(){
   const userXP = calcXP(quests);
   const userRank = getRank(userXP);
 
-  // Poll for friend requests every 15s to show badge
+  // Poll for friend requests + board invites every 15s
   useEffect(()=>{
     if(!user) return;
     const check = async()=>{
@@ -3431,6 +3560,10 @@ export default function App(){
         const ships = await sb.getFriendships(user.id);
         const incoming = ships.filter(s=>s.status==="pending"&&s.to_id===user.id);
         setFriendRequestCount(incoming.length);
+      } catch{}
+      try {
+        const invites = await sb.getMyBoardInvites(user.id);
+        setBoardInvites(Array.isArray(invites)?invites:[]);
       } catch{}
     };
     check();
@@ -3440,7 +3573,7 @@ export default function App(){
 
   const TABS=[
     {id:"quests",   label:"Quests",   icon:Icons.shield, count:personalQuests.length},
-    {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length},
+    {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length+(boardInvites.length>0?boardInvites.length:0)},
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"memories", label:"Memories", icon:Icons.camera, count:0},
@@ -3634,6 +3767,61 @@ export default function App(){
                 <Icon d={Icons.plus} size={14}/> New Board
               </button>
             </div>
+
+            {/* Pending board invites */}
+            {boardInvites.length>0&&(
+              <div style={{marginBottom:20}}>
+                <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+                  color:"#FFD478",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+                  Board Invites ({boardInvites.length})
+                </p>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {boardInvites.map(inv=>{
+                    const palette=getPalette(inv.board_id);
+                    return(
+                      <div key={inv.id} style={{background:`${palette.color}08`,
+                        border:`1px solid ${palette.color}25`,borderRadius:16,padding:"16px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                          <div style={{fontSize:28}}>🗺</div>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:15,fontWeight:700,color:"#F2F2F2",
+                              fontFamily:"'Cormorant Garamond',serif"}}>{inv.board?.name||"Board"}</div>
+                            <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
+                              Invited by <strong style={{color:"rgba(255,255,255,0.6)"}}>{inv.sender?.name||"someone"}</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={async()=>{
+                            try {
+                              await sb.respondBoardInvite(inv.id,inv.board_id,user.id,false);
+                              setBoardInvites(prev=>prev.filter(i=>i.id!==inv.id));
+                            } catch(e){console.error(e);}
+                          }} style={{flex:1,padding:"10px",borderRadius:10,
+                            background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",
+                            color:"#FF7878",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+                            Decline
+                          </button>
+                          <button onClick={async()=>{
+                            try {
+                              await sb.respondBoardInvite(inv.id,inv.board_id,user.id,true);
+                              setBoardInvites(prev=>prev.filter(i=>i.id!==inv.id));
+                              // Reload boards
+                              const updated = await sb.getMyBoards(user.id);
+                              setBoards(updated||[]);
+                            } catch(e){console.error(e);}
+                          }} style={{flex:2,padding:"10px",borderRadius:10,
+                            background:`${palette.color}15`,border:`1px solid ${palette.color}30`,
+                            color:palette.color,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+                            Join Board
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {boards.length===0 ? (
               <div style={{textAlign:"center",padding:"60px 0",animation:"cardIn 0.5s ease both"}}>
                 <div style={{fontSize:48,marginBottom:16,opacity:0.15}}>🗺</div>
@@ -3800,7 +3988,7 @@ export default function App(){
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
-      {inviteBoard&&<InviteModal board={inviteBoard} onClose={()=>setInviteBoard(null)}/>}
+      {inviteBoard&&<InviteModal board={inviteBoard} user={user} friends={friends} onClose={()=>setInviteBoard(null)}/>}
       {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
       {deleteTarget&&(
         <DeleteConfirm label={deleteTarget.type}
