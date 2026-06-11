@@ -840,7 +840,7 @@ function StreakCalendar({quests}){
 }
 
 // ─── COMPLETED TAB ────────────────────────────────────────────────────────────
-function CompletedTab({quests,onEdit}){
+function CompletedTab({quests,onEdit,onShare}){
   const done=quests.filter(q=>q.status==="Completed").sort((a,b)=>{
     if(!a.completed_at) return 1;
     if(!b.completed_at) return -1;
@@ -896,10 +896,17 @@ function CompletedTab({quests,onEdit}){
                       display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{q.description}</p>
                   )}
                 </div>
-                <button onClick={()=>onEdit(q)} style={{background:"none",border:"1px solid rgba(255,255,255,0.1)",
-                  borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.35)",flexShrink:0}}>
-                  <Icon d={Icons.edit} size={13}/>
-                </button>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button onClick={()=>onShare&&onShare(q)} style={{background:"rgba(192,132,252,0.1)",
+                    border:"1px solid rgba(192,132,252,0.25)",
+                    borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(192,132,252,0.8)",flexShrink:0}}>
+                    <Icon d={Icons.link} size={13}/>
+                  </button>
+                  <button onClick={()=>onEdit(q)} style={{background:"none",border:"1px solid rgba(255,255,255,0.1)",
+                    borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.35)",flexShrink:0}}>
+                    <Icon d={Icons.edit} size={13}/>
+                  </button>
+                </div>
               </div>
 
               {/* Party avatars */}
@@ -1024,6 +1031,183 @@ function MemberDetailPage({member,quests,onBack,onEdit}){
   );
 }
 
+
+
+// ─── INSTAGRAM SHARE CARD ─────────────────────────────────────────────────────
+function ShareQuestCard({ quest, user, onClose }) {
+  const [visible, setVisible] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const palette = getPalette(quest.id);
+  const rank = getRank(0); // placeholder
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  const cardStyle = {
+    width:360, height:360,
+    background:`linear-gradient(135deg,#0A0A0C 0%,#111116 100%)`,
+    borderRadius:24,
+    padding:28,
+    position:"relative",
+    overflow:"hidden",
+    border:`1px solid ${palette.color}30`,
+    display:"flex",flexDirection:"column",
+    justifyContent:"space-between",
+  };
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.85:0})`,
+      backdropFilter:`blur(${visible?20:0}px)`,display:"flex",alignItems:"center",
+      justifyContent:"center",zIndex:9999,padding:24,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16,
+        transform:visible?"scale(1)":"scale(0.95)",transition:"transform 0.3s cubic-bezier(0.34,1.2,0.64,1)"}}>
+
+        {/* The shareable card */}
+        <div id="share-card" style={cardStyle}>
+          {/* Background glow */}
+          <div style={{position:"absolute",top:-60,right:-60,width:200,height:200,borderRadius:"50%",
+            background:`radial-gradient(circle,${palette.color}20 0%,transparent 70%)`,pointerEvents:"none"}}/>
+          <div style={{position:"absolute",bottom:-40,left:-40,width:160,height:160,borderRadius:"50%",
+            background:`radial-gradient(circle,${palette.color}12 0%,transparent 70%)`,pointerEvents:"none"}}/>
+          {/* Top accent */}
+          <div style={{position:"absolute",top:0,left:0,right:0,height:3,
+            background:palette.grad,borderRadius:"24px 24px 0 0"}}/>
+
+          {/* Header */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:1}}>
+            <div>
+              <p style={{fontSize:9,fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",
+                color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",margin:0}}>SIDE QUESTS</p>
+              <p style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",margin:"2px 0 0"}}>
+                {user?.email?.split("@")[0]||"Adventurer"}
+              </p>
+            </div>
+            <div style={{background:`${palette.color}15`,border:`1px solid ${palette.color}30`,
+              borderRadius:8,padding:"4px 10px",fontSize:10,fontWeight:700,
+              color:palette.color,fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.06em"}}>
+              COMPLETED
+            </div>
+          </div>
+
+          {/* Main content */}
+          <div style={{position:"relative",zIndex:1}}>
+            {quest.emoji&&<div style={{fontSize:44,marginBottom:12,lineHeight:1}}>{quest.emoji}</div>}
+            <h2 style={{margin:"0 0 10px",fontSize:26,fontWeight:700,color:"#F2F2F2",
+              fontFamily:"'Cormorant Garamond',serif",lineHeight:1.2,letterSpacing:"-0.02em"}}>
+              {quest.title}
+            </h2>
+            {quest.description&&<p style={{margin:0,fontSize:12,color:"rgba(255,255,255,0.4)",
+              fontFamily:"'DM Sans',sans-serif",lineHeight:1.5,
+              display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+              {quest.description}
+            </p>}
+          </div>
+
+          {/* Footer */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:1}}>
+            <div>
+              {quest.completed_at&&<p style={{margin:0,fontSize:11,color:"rgba(255,255,255,0.35)",
+                fontFamily:"'DM Sans',sans-serif"}}>
+                🔥 {new Date(quest.completed_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+              </p>}
+              {quest.location?.name&&<p style={{margin:"3px 0 0",fontSize:10,color:"rgba(255,255,255,0.25)",
+                fontFamily:"'DM Sans',sans-serif"}}>📍 {quest.location.name}</p>}
+            </div>
+            <div style={{textAlign:"right"}}>
+              <p style={{margin:0,fontSize:9,color:`${palette.color}80`,fontFamily:"'DM Sans',sans-serif",
+                fontWeight:700,letterSpacing:"0.08em"}}>muradquestapp.xyz</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Photo if available */}
+        {quest.photo&&(
+          <div style={{width:360,borderRadius:16,overflow:"hidden",border:`1px solid ${palette.color}30`}}>
+            <img src={quest.photo} alt="" style={{width:"100%",height:200,objectFit:"cover",display:"block"}}/>
+          </div>
+        )}
+
+        {/* Instructions */}
+        <div style={{textAlign:"center",maxWidth:300}}>
+          <p style={{fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6,margin:0}}>
+            Screenshot this card and share to Instagram! ✨
+          </p>
+        </div>
+
+        <button onClick={close} style={{padding:"12px 32px",borderRadius:14,
+          background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",
+          color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:14,fontWeight:600,
+          fontFamily:"'DM Sans',sans-serif"}}>
+          Close
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ─── QUEST CARD MINI (2-column grid) ─────────────────────────────────────────
+function QuestCardMini({ quest, onEdit, onDelete, index }) {
+  const [h,setH] = useState(false);
+  const palette = getPalette(quest.id);
+  const statusColor = STATUS_META[quest.status]?.color || "#A8FF78";
+
+  return(
+    <div onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
+      style={{
+        position:"relative",overflow:"hidden",
+        background:h?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.025)",
+        border:`1px solid ${h?palette.color+"40":"rgba(255,255,255,0.07)"}`,
+        borderRadius:16,padding:"14px 12px",
+        transition:"all 0.2s",
+        transform:h?"translateY(-2px)":"none",
+        boxShadow:h?`0 8px 20px rgba(0,0,0,0.3)`:"none",
+        animation:`cardIn 0.4s ease ${index*0.04}s both`,
+        cursor:"pointer",
+        display:"flex",flexDirection:"column",gap:10,
+        minHeight:100,
+      }}>
+      <div style={{position:"absolute",top:0,left:0,right:0,height:2,
+        background:palette.grad,opacity:h?0.9:0.35,transition:"opacity 0.2s"}}/>
+
+      {/* Status dot */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{width:7,height:7,borderRadius:"50%",background:statusColor,
+          boxShadow:`0 0 8px ${statusColor}`,flexShrink:0,
+          animation:quest.status==="Active"?"pulseDot 2s ease-in-out infinite":"none"}}/>
+        {quest.emoji&&<span style={{fontSize:16}}>{quest.emoji}</span>}
+      </div>
+
+      {/* Title — full wrap */}
+      <h3 style={{margin:0,fontSize:14,fontWeight:700,color:"#F2F2F2",lineHeight:1.35,
+        fontFamily:"'Cormorant Garamond',serif",wordBreak:"break-word",flex:1}}>
+        {quest.title}
+      </h3>
+
+      {/* Footer */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.08em",
+          textTransform:"uppercase",color:statusColor,fontFamily:"'DM Sans',sans-serif"}}>
+          {quest.status}
+        </span>
+        <div style={{display:"flex",gap:4,opacity:h?1:0,transition:"opacity 0.2s"}}
+          onClick={e=>e.stopPropagation()}>
+          <button onClick={onEdit} style={{background:"rgba(255,255,255,0.06)",
+            border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,
+            padding:"3px 5px",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
+            <Icon d={Icons.edit} size={11}/>
+          </button>
+          <button onClick={onDelete} style={{background:"rgba(255,80,80,0.08)",
+            border:"1px solid rgba(255,80,80,0.2)",borderRadius:6,
+            padding:"3px 5px",cursor:"pointer",color:"rgba(255,120,120,0.6)"}}>
+            <Icon d={Icons.trash} size={11}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── QUEST CARD ───────────────────────────────────────────────────────────────
 function QuestCard({quest,members,onEdit,onDelete,index}){
   const [expanded,setExpanded]=useState(false);
@@ -1071,8 +1255,11 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
         <div style={{flex:1,minWidth:0}}>
           <h3 style={{margin:0,fontSize:16,fontWeight:700,letterSpacing:"-0.02em",color:"#F2F2F2",lineHeight:1.3,
             fontFamily:"'Cormorant Garamond',serif",
-            display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",
-            overflow:"hidden",wordBreak:"break-word"}}>{quest.title}</h3>
+            wordBreak:"break-word",
+            overflow:"hidden",
+            display:expanded?"block":"-webkit-box",
+            WebkitLineClamp:expanded?undefined:2,
+            WebkitBoxOrient:expanded?undefined:"vertical"}}>{quest.title}</h3>
           {!expanded&&(quest.description||quest.location?.name||quest.due_date)&&(
             <p style={{margin:"3px 0 0",fontSize:12,color:"rgba(255,255,255,0.3)",whiteSpace:"nowrap",
               overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'DM Sans',sans-serif"}}>
@@ -2197,6 +2384,7 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
       </div>
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
+      {shareQuest&&<ShareQuestCard quest={shareQuest} user={user} onClose={()=>setShareQuest(null)}/>}
       {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
     </div>
   );
@@ -3410,6 +3598,7 @@ export default function App(){
   const [memberModal,setMemberModal] = useState(null);
   const [deleteTarget,setDeleteTarget] = useState(null);
   const [memberDetail,setMemberDetail] = useState(null);
+  const [shareQuest,setShareQuest]       = useState(null);
   const [mounted,setMounted]     = useState(false);
   const [syncing,setSyncing]     = useState(false);
 
@@ -3794,6 +3983,14 @@ export default function App(){
                 <div style={{fontSize:48,marginBottom:16,opacity:0.12}}>⚔</div>
                 <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7}}>{filter==="All"?"No quests yet.\nBegin your journey.":`No ${filter} quests.`}</p>
               </div>
+            ):questScope==="personal"?(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {filtered.map((q,i)=>(
+                  <QuestCardMini key={q.id} quest={q} index={i}
+                    onEdit={()=>setQuestModal(q)}
+                    onDelete={()=>setDeleteTarget({id:q.id,type:"quest"})}/>
+                ))}
+              </div>
             ):(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {filtered.map((q,i)=>(
@@ -3980,7 +4177,7 @@ export default function App(){
               <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",marginBottom:4}}>Hall of Fame</p>
               <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Completed Quests</h2>
             </div>
-            <CompletedTab quests={quests} onEdit={q=>setQuestModal(q)}/>
+            <CompletedTab quests={quests} onEdit={q=>setQuestModal(q)} onShare={q=>setShareQuest(q)}/>
           </div>
         )}
 
@@ -4045,6 +4242,7 @@ export default function App(){
       </div>
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
+      {shareQuest&&<ShareQuestCard quest={shareQuest} user={user} onClose={()=>setShareQuest(null)}/>}
       {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
       {inviteBoard&&<InviteModal board={inviteBoard} user={user} friends={friends} onClose={()=>setInviteBoard(null)}/>}
       {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
