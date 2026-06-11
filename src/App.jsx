@@ -2320,7 +2320,6 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
       </div>
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
-      {shareQuest&&<ShareQuestCard quest={shareQuest} user={user} onClose={()=>setShareQuest(null)}/>}
       {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
     </div>
   );
@@ -3729,7 +3728,7 @@ export default function App(){
   const scopedQuests = questScope==="personal" ? personalQuests : sharedQuests;
   const filtered = filter==="All" ? scopedQuests : scopedQuests.filter(q=>q.status===filter);
   const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:scopedQuests.filter(q=>q.status===s).length}),{});
-  const completedCount=personalQuests.filter(q=>q.status==="Completed").length;
+  const completedCount=quests.filter(q=>q.status==="Completed").length;
 
   const userXP = calcXP(quests);
   const userRank = getRank(userXP);
