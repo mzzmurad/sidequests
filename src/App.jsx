@@ -1146,68 +1146,6 @@ function ShareQuestCard({ quest, user, onClose }) {
   );
 }
 
-// ─── QUEST CARD MINI (2-column grid) ─────────────────────────────────────────
-function QuestCardMini({ quest, onEdit, onDelete, index }) {
-  const [h,setH] = useState(false);
-  const palette = getPalette(quest.id);
-  const statusColor = STATUS_META[quest.status]?.color || "#A8FF78";
-
-  return(
-    <div onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
-      style={{
-        position:"relative",overflow:"hidden",
-        background:h?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.025)",
-        border:`1px solid ${h?palette.color+"40":"rgba(255,255,255,0.07)"}`,
-        borderRadius:16,padding:"14px 12px",
-        transition:"all 0.2s",
-        transform:h?"translateY(-2px)":"none",
-        boxShadow:h?`0 8px 20px rgba(0,0,0,0.3)`:"none",
-        animation:`cardIn 0.4s ease ${index*0.04}s both`,
-        cursor:"pointer",
-        display:"flex",flexDirection:"column",gap:10,
-        minHeight:100,
-      }}>
-      <div style={{position:"absolute",top:0,left:0,right:0,height:2,
-        background:palette.grad,opacity:h?0.9:0.35,transition:"opacity 0.2s"}}/>
-
-      {/* Status dot */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{width:7,height:7,borderRadius:"50%",background:statusColor,
-          boxShadow:`0 0 8px ${statusColor}`,flexShrink:0,
-          animation:quest.status==="Active"?"pulseDot 2s ease-in-out infinite":"none"}}/>
-        {quest.emoji&&<span style={{fontSize:16}}>{quest.emoji}</span>}
-      </div>
-
-      {/* Title — full wrap */}
-      <h3 style={{margin:0,fontSize:14,fontWeight:700,color:"#F2F2F2",lineHeight:1.35,
-        fontFamily:"'Cormorant Garamond',serif",wordBreak:"break-word",flex:1}}>
-        {quest.title}
-      </h3>
-
-      {/* Footer */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.08em",
-          textTransform:"uppercase",color:statusColor,fontFamily:"'DM Sans',sans-serif"}}>
-          {quest.status}
-        </span>
-        <div style={{display:"flex",gap:4,opacity:h?1:0,transition:"opacity 0.2s"}}
-          onClick={e=>e.stopPropagation()}>
-          <button onClick={onEdit} style={{background:"rgba(255,255,255,0.06)",
-            border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,
-            padding:"3px 5px",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
-            <Icon d={Icons.edit} size={11}/>
-          </button>
-          <button onClick={onDelete} style={{background:"rgba(255,80,80,0.08)",
-            border:"1px solid rgba(255,80,80,0.2)",borderRadius:6,
-            padding:"3px 5px",cursor:"pointer",color:"rgba(255,120,120,0.6)"}}>
-            <Icon d={Icons.trash} size={11}/>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── QUEST CARD ───────────────────────────────────────────────────────────────
 function QuestCard({quest,members,onEdit,onDelete,index}){
   const [expanded,setExpanded]=useState(false);
@@ -1256,10 +1194,8 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
           <h3 style={{margin:0,fontSize:16,fontWeight:700,letterSpacing:"-0.02em",color:"#F2F2F2",lineHeight:1.3,
             fontFamily:"'Cormorant Garamond',serif",
             wordBreak:"break-word",
-            overflow:"hidden",
-            display:expanded?"block":"-webkit-box",
-            WebkitLineClamp:expanded?undefined:2,
-            WebkitBoxOrient:expanded?undefined:"vertical"}}>{quest.title}</h3>
+            whiteSpace:"normal",
+            overflow:"visible"}}>{quest.title}</h3>
           {!expanded&&(quest.description||quest.location?.name||quest.due_date)&&(
             <p style={{margin:"3px 0 0",fontSize:12,color:"rgba(255,255,255,0.3)",whiteSpace:"nowrap",
               overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'DM Sans',sans-serif"}}>
@@ -3982,14 +3918,6 @@ export default function App(){
               <div style={{textAlign:"center",padding:"80px 0",animation:"cardIn 0.5s ease both"}}>
                 <div style={{fontSize:48,marginBottom:16,opacity:0.12}}>⚔</div>
                 <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7}}>{filter==="All"?"No quests yet.\nBegin your journey.":`No ${filter} quests.`}</p>
-              </div>
-            ):questScope==="personal"?(
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {filtered.map((q,i)=>(
-                  <QuestCardMini key={q.id} quest={q} index={i}
-                    onEdit={()=>setQuestModal(q)}
-                    onDelete={()=>setDeleteTarget({id:q.id,type:"quest"})}/>
-                ))}
               </div>
             ):(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
