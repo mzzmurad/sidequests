@@ -210,14 +210,20 @@ const sb = {
     const check = await fetch(`${SUPABASE_URL}/rest/v1/board_members?board_id=eq.${boardId}&user_id=eq.${toUserId}`, {headers:this.h});
     const existing = await check.json();
     if(Array.isArray(existing) && existing.length > 0) throw new Error("Already a member");
-    // Check no pending invite
-    const checkInvite = await fetch(`${SUPABASE_URL}/rest/v1/board_invites?board_id=eq.${boardId}&to_id=eq.${toUserId}&status=eq.pending`, {headers:this.h});
-    const existingInvite = await checkInvite.json();
-    if(Array.isArray(existingInvite) && existingInvite.length > 0) throw new Error("Invite already sent");
-    await fetch(`${SUPABASE_URL}/rest/v1/board_invites`, {
-      method:"POST", headers:{...this.h,"Prefer":"return=minimal"},
+    // Delete any old declined/accepted invite first so we can re-invite
+    await fetch(`${SUPABASE_URL}/rest/v1/board_invites?board_id=eq.${boardId}&to_id=eq.${toUserId}`,
+      {method:"DELETE", headers:this.h});
+    // Send fresh invite
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/board_invites`, {
+      method:"POST",
+      headers:{...this.h,"Prefer":"return=minimal"},
       body:JSON.stringify({id:crypto.randomUUID(), board_id:boardId, from_id:fromUserId, to_id:toUserId, status:"pending", created_at:new Date().toISOString()})
     });
+    if(!r.ok) {
+      const err = await r.text();
+      console.error("sendBoardInvite failed:", r.status, err);
+      throw new Error("Could not send invite. Try again.");
+    }
   },
   async getMyBoardInvites(userId) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/board_invites?to_id=eq.${userId}&status=eq.pending`, {headers:this.h});
