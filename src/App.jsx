@@ -501,6 +501,7 @@ const Icons={
   camera:  "M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   cal:     "M3 9h18M8 2v4M16 2v4M3 4h18a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z",
   board:   "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+  globe:   "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
   link:    "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
   copy:    "M20 9H11a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
 };
@@ -3315,6 +3316,165 @@ function QuestReactions({ questId, userId }) {
   );
 }
 
+
+// ─── QUEST MAP PAGE ───────────────────────────────────────────────────────────
+function QuestMapPage({ quests }) {
+  const [selectedQuest, setSelectedQuest] = useState(null);
+  const [filter, setFilter] = useState("All"); // All, Active, Completed
+
+  const questsWithLocation = quests.filter(q=>q.location?.name);
+  const filtered = filter==="All" ? questsWithLocation 
+    : questsWithLocation.filter(q=>q.status===filter);
+
+  // Build a multi-location map query
+  const allLocations = filtered.map(q=>encodeURIComponent(q.location.name)).join("|");
+  
+  // Use the selected quest location or first quest with location
+  const focusQuest = selectedQuest || filtered[0];
+  const mapQuery = focusQuest 
+    ? encodeURIComponent(focusQuest.location.name + " Azerbaijan")
+    : "Azerbaijan";
+
+  return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
+      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+        color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your World</p>
+      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:16}}>
+        Quest Map
+      </h2>
+
+      {/* Stats */}
+      <div style={{display:"flex",gap:10,marginBottom:16}}>
+        {[
+          {l:"Total",v:questsWithLocation.length,c:"#F0F0F0"},
+          {l:"Active",v:questsWithLocation.filter(q=>q.status==="Active").length,c:"#A8FF78"},
+          {l:"Completed",v:questsWithLocation.filter(q=>q.status==="Completed").length,c:"#78C1FF"},
+        ].map(({l,v,c})=>(
+          <div key={l} style={{flex:1,textAlign:"center",background:"rgba(255,255,255,0.03)",
+            border:`1px solid rgba(255,255,255,0.07)`,borderRadius:12,padding:"10px 8px"}}>
+            <div style={{fontSize:20,fontWeight:700,color:c,fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:"0.08em",marginTop:3,
+              fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter pills */}
+      <div style={{display:"flex",gap:7,marginBottom:14}}>
+        {["All","Active","Completed","On Hold"].map(s=>{
+          const active=filter===s;
+          const color=s==="All"?"#F0F0F0":STATUS_META[s]?.color||"#F0F0F0";
+          return(
+            <button key={s} onClick={()=>setFilter(s)} style={{
+              padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:600,
+              cursor:"pointer",fontFamily:"'DM Sans',sans-serif",
+              border:`1px solid ${active?color:"rgba(255,255,255,0.09)"}`,
+              background:active?`${color}15`:"transparent",
+              color:active?color:"rgba(255,255,255,0.3)",
+              transition:"all 0.2s",flexShrink:0,
+            }}>{s}</button>
+          );
+        })}
+      </div>
+
+      {questsWithLocation.length===0?(
+        <div style={{textAlign:"center",padding:"60px 0"}}>
+          <div style={{fontSize:40,marginBottom:12,opacity:0.15}}>📍</div>
+          <p style={{fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
+            No quests with locations yet.<br/>Add a location to a quest to see it here.
+          </p>
+        </div>
+      ):(
+        <>
+          {/* Main map showing selected or first quest */}
+          {focusQuest&&(
+            <div style={{marginBottom:16,borderRadius:16,overflow:"hidden",
+              border:"1px solid rgba(255,255,255,0.1)",position:"relative"}}>
+              <iframe
+                title="quest-map"
+                src={`https://maps.google.com/maps?q=${mapQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
+                width="100%" height="280"
+                style={{display:"block",border:"none",
+                  filter:"invert(1) hue-rotate(190deg) saturate(0.55) brightness(0.82) contrast(1.05)"}}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+              {/* Overlay info */}
+              <div style={{position:"absolute",bottom:0,left:0,right:0,
+                background:"linear-gradient(to top,rgba(8,8,12,0.95) 0%,transparent 100%)",
+                padding:"20px 14px 12px",display:"flex",alignItems:"center",gap:8}}>
+                {focusQuest.emoji&&<span style={{fontSize:18}}>{focusQuest.emoji}</span>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0",
+                    fontFamily:"'Cormorant Garamond',serif",
+                    whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                    {focusQuest.title}
+                  </div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",marginTop:1}}>
+                    📍 {focusQuest.location.name}
+                  </div>
+                </div>
+                <div style={{flexShrink:0}}>
+                  <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.08em",
+                    textTransform:"uppercase",color:STATUS_META[focusQuest.status]?.color||"#A8FF78",
+                    background:`${STATUS_META[focusQuest.status]?.color||"#A8FF78"}15`,
+                    border:`1px solid ${STATUS_META[focusQuest.status]?.color||"#A8FF78"}30`,
+                    padding:"2px 7px",borderRadius:4,fontFamily:"'DM Sans',sans-serif"}}>
+                    {focusQuest.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Quest location list */}
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+            {filtered.length} location{filtered.length!==1?"s":""}
+          </p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {filtered.map((q,i)=>{
+              const palette=getPalette(q.id);
+              const isSelected=selectedQuest?.id===q.id;
+              return(
+                <button key={q.id} onClick={()=>setSelectedQuest(isSelected?null:q)}
+                  style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
+                    borderRadius:14,cursor:"pointer",textAlign:"left",
+                    background:isSelected?`${palette.color}12`:"rgba(255,255,255,0.025)",
+                    border:`1px solid ${isSelected?palette.color+"40":"rgba(255,255,255,0.06)"}`,
+                    transition:"all 0.15s",animation:`cardIn 0.4s ease ${i*0.04}s both`}}>
+                  <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
+                    background:`${palette.color}15`,border:`1px solid ${palette.color}25`,
+                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+                    {q.emoji||"📍"}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
+                      fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3,
+                      wordBreak:"break-word"}}>{q.title}</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",
+                      fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
+                      📍 {q.location.name}
+                    </div>
+                  </div>
+                  <div style={{flexShrink:0}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",
+                      background:STATUS_META[q.status]?.color||"#A8FF78",
+                      boxShadow:`0 0 6px ${STATUS_META[q.status]?.color||"#A8FF78"}`,
+                      animation:q.status==="Active"?"pulseDot 2s ease-in-out infinite":"none"}}/>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
@@ -3758,6 +3918,7 @@ export default function App(){
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"memories", label:"Memories", icon:Icons.camera, count:0},
+    {id:"map",      label:"Map",      icon:Icons.globe,  count:quests.filter(q=>q.location?.name).length},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
     {id:"profile",  label:"Profile",  icon:Icons.user,   count:0},
   ];
@@ -4084,6 +4245,11 @@ export default function App(){
 
         {tab==="memories"&&(
           <MemoriesPage user={user}/>
+        )}
+
+        {/* MAP TAB */}
+        {tab==="map"&&(
+          <QuestMapPage quests={quests}/>
         )}
 
         {tab==="profile"&&(
