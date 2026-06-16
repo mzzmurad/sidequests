@@ -3489,6 +3489,22 @@ function QuestIdeaGenerator({ onAddQuest, onClose }) {
   const generateIdeas = async() => {
     setLoading(true);
     try {
+      // Use random seed to ensure different results every time
+      const seeds = [
+        "public stunts and pranks",
+        "food and eating challenges", 
+        "Baku city exploration",
+        "brother challenges",
+        "night missions",
+        "disguise and costume missions",
+        "social experiments",
+        "sports and physical challenges",
+        "creative and artistic",
+        "unhinged solo missions"
+      ];
+      const seed = seeds[Math.floor(Math.random()*seeds.length)];
+      const randomNum = Math.floor(Math.random()*1000);
+
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -3497,19 +3513,33 @@ function QuestIdeaGenerator({ onAddQuest, onClose }) {
           max_tokens:1000,
           messages:[{
             role:"user",
-            content:`Generate 8 unique side quest ideas. These are real life adventures and challenges to do.
+            content:`Generate 8 completely unique side quest ideas. Seed: ${seed} #${randomNum}
 
-The vibe: short punchy titles, real things you can actually do, funny, unhinged, memorable, Instagram-worthy. Think: "Trashbagging over Grass", "Cooking with Grabbers", "Wear Inflatable Dino Costumes", "Convince a Restaurant to Let You Cook One Dish", "Giant Sand Castle", "Hot Wine Night".
+These are real life adventures. The person lives in Baku Azerbaijan and has a brother.
 
-Mix of:
-- Funny public stunts
-- Things to do with friends/brother
-- Baku Azerbaijan specific activities  
-- Unhinged but doable challenges
-- Things that make great stories
+EXACT VIBE — match these existing quests exactly:
+- "Trashbagging over Grass" (slide on grass in trash bags)
+- "Cooking with Grabbers" (cook a full meal using grabber tools)  
+- "Wear Inflatable Dino Costumes" (go places in dinosaur costumes)
+- "Convince a Restaurant to Let You Cook One Dish on Their Menu"
+- "Hot Wine Night" (make hot wine from scratch)
+- "Giant Sand Castle" (build massive sandcastle)
+- "Drunk Bowling"
+- "Wig Snatching Party"
 
-Return ONLY a JSON array of 8 objects, no markdown, no explanation:
-[{"title":"Quest Title","description":"One short sentence","emoji":"🎯"}]`
+Rules:
+- Short punchy titles (2-5 words max usually)
+- Specific and weird, not generic
+- Actually doable in real life
+- Funny or Instagram-worthy
+- Mix of solo, with brother, with crew
+- Some Baku-specific, some universal
+- Think: what would make a great story to tell later
+- Category: ${seed}
+- Every generation must be COMPLETELY DIFFERENT from before
+
+Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation:
+[{"title":"Quest Title","description":"One punchy sentence","emoji":"🎯"}]`
           }]
         })
       });
@@ -3625,12 +3655,16 @@ Return ONLY a JSON array of 8 objects, no markdown, no explanation:
         {/* Generate more button */}
         {!loading&&(
           <button onClick={generateIdeas} style={{
-            marginTop:14,padding:"15px",borderRadius:16,border:"none",cursor:"pointer",
-            background:"linear-gradient(135deg,rgba(168,255,120,0.15),rgba(120,193,255,0.15))",
-            color:"rgba(255,255,255,0.8)",fontSize:14,fontWeight:700,
+            marginTop:14,padding:"15px",borderRadius:16,border:"1px solid rgba(255,255,255,0.1)",
+            cursor:"pointer",
+            background:"linear-gradient(135deg,rgba(168,255,120,0.12),rgba(120,193,255,0.12))",
+            color:"rgba(255,255,255,0.9)",fontSize:14,fontWeight:700,
             fontFamily:"'DM Sans',sans-serif",flexShrink:0,
-            display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            ✨ Generate More Ideas
+            display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+            transition:"all 0.2s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="linear-gradient(135deg,rgba(168,255,120,0.2),rgba(120,193,255,0.2))"}
+            onMouseLeave={e=>e.currentTarget.style.background="linear-gradient(135deg,rgba(168,255,120,0.12),rgba(120,193,255,0.12))"}>
+            ✨ Generate 8 New Ideas
           </button>
         )}
       </div>
