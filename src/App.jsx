@@ -3475,6 +3475,170 @@ function QuestMapPage({ quests }) {
   );
 }
 
+
+// ─── QUEST IDEA GENERATOR ─────────────────────────────────────────────────────
+function QuestIdeaGenerator({ onAddQuest, onClose }) {
+  const [ideas, setIdeas]       = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [visible, setVisible]   = useState(false);
+  const [added, setAdded]       = useState({});
+
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); generateIdeas(); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  const generateIdeas = async() => {
+    setLoading(true);
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-6",
+          max_tokens:1000,
+          messages:[{
+            role:"user",
+            content:`Generate 8 unique side quest ideas. These are real life adventures and challenges to do.
+
+The vibe: short punchy titles, real things you can actually do, funny, unhinged, memorable, Instagram-worthy. Think: "Trashbagging over Grass", "Cooking with Grabbers", "Wear Inflatable Dino Costumes", "Convince a Restaurant to Let You Cook One Dish", "Giant Sand Castle", "Hot Wine Night".
+
+Mix of:
+- Funny public stunts
+- Things to do with friends/brother
+- Baku Azerbaijan specific activities  
+- Unhinged but doable challenges
+- Things that make great stories
+
+Return ONLY a JSON array of 8 objects, no markdown, no explanation:
+[{"title":"Quest Title","description":"One short sentence","emoji":"🎯"}]`
+          }]
+        })
+      });
+      const d = await r.json();
+      const text = d.content?.[0]?.text||"[]";
+      const clean = text.replace(/\`\`\`json|\`\`\`/g,"").trim();
+      const parsed = JSON.parse(clean);
+      setIdeas(parsed);
+    } catch(e) {
+      console.error(e);
+      setIdeas([
+        {title:"Wear a Suit to the Bazaar",description:"Buy groceries in full formal attire",emoji:"🤵"},
+        {title:"Midnight Food Crawl",description:"Hit every 24hr spot in Baku in one night",emoji:"🌙"},
+        {title:"Convince a Stranger to Join Your Quest",description:"Recruit someone random off the street",emoji:"🤝"},
+        {title:"Cook Blindfolded",description:"Full meal, eyes closed, kitchen chaos",emoji:"👨‍🍳"},
+        {title:"Go Karting in Costume",description:"Race in whatever ridiculous outfit you own",emoji:"🏎"},
+        {title:"Find the Best Cheesecake",description:"Full bracket tournament across Baku",emoji:"🍰"},
+        {title:"Rooftop Barbecue",description:"Find a rooftop and grill something",emoji:"🔥"},
+        {title:"Speak Only in Questions",description:"Full day, every sentence is a question",emoji:"❓"},
+      ]);
+    }
+    setLoading(false);
+  };
+
+  const addIdea = (idea) => {
+    onAddQuest({title:idea.title, description:idea.description, emoji:idea.emoji});
+    setAdded(a=>({...a,[idea.title]:true}));
+  };
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.8:0})`,
+      backdropFilter:`blur(${visible?20:0}px)`,display:"flex",alignItems:"flex-end",
+      justifyContent:"center",zIndex:9999,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
+        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        width:"100%",maxWidth:560,padding:"12px 20px 52px",
+        display:"flex",flexDirection:"column",gap:0,
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
+        maxHeight:"88vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",
+          margin:"8px auto 16px",flexShrink:0}}/>
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexShrink:0}}>
+          <div>
+            <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
+              Quest Ideas ✨
+            </h2>
+            <p style={{margin:"3px 0 0",fontSize:12,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+              Tap + to add to your quests
+            </p>
+          </div>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",
+            border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
+            padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+            <Icon d={Icons.x} size={16}/>
+          </button>
+        </div>
+
+        {loading?(
+          <div style={{display:"flex",flexDirection:"column",gap:10,padding:"10px 0"}}>
+            {[...Array(6)].map((_,i)=>(
+              <div key={i} style={{height:72,borderRadius:16,
+                background:"rgba(255,255,255,0.04)",
+                animation:"pulse 1.5s ease-in-out infinite",
+                animationDelay:`${i*0.1}s`}}/>
+            ))}
+            <style>{`@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:0.8}}`}</style>
+          </div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {ideas.map((idea,i)=>{
+              const isAdded = added[idea.title];
+              const colors = ["#A8FF78","#78C1FF","#C084FC","#FBBF24","#F472B6","#34D399","#FB923C","#E879F9"];
+              const color = colors[i%colors.length];
+              return(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:12,
+                  padding:"14px 14px",borderRadius:16,
+                  background:isAdded?`${color}08`:"rgba(255,255,255,0.03)",
+                  border:`1px solid ${isAdded?color+"30":"rgba(255,255,255,0.07)"}`,
+                  transition:"all 0.2s",
+                  animation:`cardIn 0.4s ease ${i*0.06}s both`}}>
+                  <div style={{width:42,height:42,borderRadius:12,flexShrink:0,
+                    background:`${color}12`,border:`1px solid ${color}25`,
+                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+                    {idea.emoji||"⚔"}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#F2F2F2",
+                      fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3,
+                      wordBreak:"break-word"}}>{idea.title}</div>
+                    {idea.description&&<div style={{fontSize:11.5,color:"rgba(255,255,255,0.35)",
+                      fontFamily:"'DM Sans',sans-serif",marginTop:2,lineHeight:1.4}}>
+                      {idea.description}
+                    </div>}
+                  </div>
+                  <button onClick={()=>!isAdded&&addIdea(idea)} style={{
+                    width:34,height:34,borderRadius:10,border:"none",cursor:isAdded?"default":"pointer",
+                    background:isAdded?`${color}20`:"rgba(255,255,255,0.08)",
+                    color:isAdded?color:"rgba(255,255,255,0.5)",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    flexShrink:0,fontSize:18,fontWeight:700,transition:"all 0.2s"}}>
+                    {isAdded?"✓":"+"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Generate more button */}
+        {!loading&&(
+          <button onClick={generateIdeas} style={{
+            marginTop:14,padding:"15px",borderRadius:16,border:"none",cursor:"pointer",
+            background:"linear-gradient(135deg,rgba(168,255,120,0.15),rgba(120,193,255,0.15))",
+            color:"rgba(255,255,255,0.8)",fontSize:14,fontWeight:700,
+            fontFamily:"'DM Sans',sans-serif",flexShrink:0,
+            display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            ✨ Generate More Ideas
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
@@ -3694,6 +3858,7 @@ export default function App(){
   const [deleteTarget,setDeleteTarget] = useState(null);
   const [memberDetail,setMemberDetail] = useState(null);
   const [shareQuest,setShareQuest]       = useState(null);
+  const [showIdeas,setShowIdeas]         = useState(false);
   const [mounted,setMounted]     = useState(false);
   const [syncing,setSyncing]     = useState(false);
 
@@ -4311,6 +4476,23 @@ export default function App(){
         )}
       </main>
 
+      {/* ✨ Idea generator button */}
+      {tab==="quests"&&!activeBoard&&(
+        <button onClick={()=>setShowIdeas(true)} style={{
+          position:"fixed",bottom:96,right:20,zIndex:101,
+          width:46,height:46,borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",
+          cursor:"pointer",
+          background:"rgba(20,20,24,0.9)",
+          backdropFilter:"blur(12px)",
+          boxShadow:"0 4px 20px rgba(0,0,0,0.5)",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          fontSize:22,transition:"transform 0.2s"}}
+          onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"}
+          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+          ✨
+        </button>
+      )}
+
       {(tab==="quests"||tab==="party"||tab==="boards")&&!activeBoard&&(
         <button onClick={()=>{
           if(tab==="quests") setQuestModal({...EMPTY_QUEST});
@@ -4336,6 +4518,13 @@ export default function App(){
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {shareQuest&&<ShareQuestCard quest={shareQuest} user={user} onClose={()=>setShareQuest(null)}/>}
+      {showIdeas&&<QuestIdeaGenerator
+        onAddQuest={(idea)=>{
+          setQuestModal({...EMPTY_QUEST,...idea});
+          setShowIdeas(false);
+        }}
+        onClose={()=>setShowIdeas(false)}
+      />}
       {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
       {inviteBoard&&<InviteModal board={inviteBoard} user={user} friends={friends} onClose={()=>setInviteBoard(null)}/>}
       {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
