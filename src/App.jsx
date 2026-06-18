@@ -3355,262 +3355,184 @@ function QuestReactions({ questId, userId }) {
 function QuestMapPage({ quests }) {
   const [selected, setSelected] = useState(null);
   const [filter, setFilter]     = useState("All");
-  const mapRef = useRef(null);
-  const leafletMap = useRef(null);
-  const markersRef = useRef([]);
+  const [coords, setCoords]     = useState({});
+  const [loading, setLoading]   = useState(true);
+  const mapRef    = useRef(null);
+  const leafMap   = useRef(null);
+  const markers   = useRef([]);
 
-  const [geocoded, setGeocoded] = useState({});
-  // Separate quests that already have coords from ones that need geocoding
-  const questsWithLocation = quests.filter(q=>q.location?.name);
-  const alreadyGeocoded = questsWithLocation.filter(q=>q.location?.lat&&q.location?.lng);
-  const filtered = filter==="All"?questsWithLocation:questsWithLocation.filter(q=>q.status===filter);
+  const withLoc = quests.filter(q=>q.location?.name);
+  const filtered = filter==="All"?withLoc:withLoc.filter(q=>q.status===filter);
 
-  const [geocodeStatus, setGeocodeStatus] = useState({});
-
-  // Pre-populate coords for quests that already have lat/lng stored
+  // Geocode all locations on mount
   useEffect(()=>{
-    const withCoords = {};
-    questsWithLocation.forEach(q=>{
-      if(q.location?.lat&&q.location?.lng) {
-        withCoords[q.id] = {lat:q.location.lat, lng:q.location.lng};
+    if(withLoc.length===0){ setLoading(false); return; }
+    let cancelled = false;
+    (async()=>{
+      const result = {};
+      for(const q of withLoc) {
+        if(cancelled) break;
+        // Check if already has lat/lng stored
+        if(q.location?.lat && q.location?.lng) {
+          result[q.id] = {lat:Number(q.location.lat), lng:Number(q.location.lng)};
+          continue;
+        }
+        // Try Nominatim
+        const tries = [
+          q.location.name + " Azerbaijan",
+          q.location.name,
+        ];
+        for(const t of tries) {
+          try {
+            await new Promise(r=>setTimeout(r,500)); // respect rate limit
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(t)}`,
+              {headers:{"User-Agent":"SideQuests/1.0 muradquestapp.xyz"}}
+            );
+            const d = await res.json();
+            if(d&&d[0]) {
+              result[q.id] = {lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)};
+              break;
+            }
+          } catch{}
+        }
       }
-    });
-    if(Object.keys(withCoords).length>0) setGeocoded(prev=>({...prev,...withCoords}));
-  },[quests.length]);
-
-  // Geocode all location names using Nominatim (free, no key needed)
-  useEffect(()=>{
-    const toGeocode = questsWithLocation.filter(q=>!geocoded[q.id]&&!geocodeStatus[q.id]&&q.location?.name);
-    if(toGeocode.length===0) return;
-    let i = 0;
-    const next = async()=>{
-      if(i>=toGeocode.length) return;
-      const q = toGeocode[i++];
-      setGeocodeStatus(prev=>({...prev,[q.id]:"loading"}));
-      // Try multiple search strategies
-      const searches = [
-        q.location.name,                                    // exact name
-        q.location.name + ", Azerbaijan",                   // + country
-        q.location.name + ", Baku",                        // + city
-        q.location.name.split(",")[0].trim() + " Azerbaijan", // first part + country
-      ];
-      let found = false;
-      for(const search of searches) {
-        try {
-          const query = encodeURIComponent(search);
-          const r = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=az`,
-            {headers:{"User-Agent":"SideQuestsApp/1.0"}}
-          );
-          const d = await r.json();
-          if(d[0]) {
-            setGeocoded(prev=>({...prev,[q.id]:{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon),name:d[0].display_name}}));
-            setGeocodeStatus(prev=>({...prev,[q.id]:"done"}));
-            found = true;
-            break;
-          }
-        } catch{}
-        await new Promise(res=>setTimeout(res,200));
-      }
-      // If still not found, try without country restriction
-      if(!found) {
-        try {
-          const query = encodeURIComponent(q.location.name);
-          const r = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
-            {headers:{"User-Agent":"SideQuestsApp/1.0"}}
-          );
-          const d = await r.json();
-          if(d[0]) {
-            setGeocoded(prev=>({...prev,[q.id]:{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}}));
-          }
-        } catch{}
-        setGeocodeStatus(prev=>({...prev,[q.id]:"done"}));
-      }
-      setTimeout(next, 350);
-    };
-    next();
-  },[questsWithLocation.length]);
-
-  // Load Leaflet dynamically
-  useEffect(()=>{
-    // Load CSS
-    if(!document.getElementById("leaflet-css")) {
-      const link = document.createElement("link");
-      link.id = "leaflet-css";
-      link.rel = "stylesheet";
-      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-      document.head.appendChild(link);
-    }
-    // Load JS
-    const loadLeaflet = ()=>{
-      if(window.L) { initMap(); return; }
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-      script.onload = initMap;
-      document.head.appendChild(script);
-    };
-    loadLeaflet();
-    return ()=>{ if(leafletMap.current) { leafletMap.current.remove(); leafletMap.current=null; } };
+      if(!cancelled) { setCoords(result); setLoading(false); }
+    })();
+    return ()=>{ cancelled=true; };
   },[]);
 
-  const initMap = ()=>{
-    if(!mapRef.current||leafletMap.current) return;
-    const map = window.L.map(mapRef.current, {
-      center:[40.4093,49.8671], zoom:11,
-      zoomControl:true, scrollWheelZoom:true,
-    });
-    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
-      attribution:"©OpenStreetMap ©CARTO",
-      subdomains:"abcd", maxZoom:19
-    }).addTo(map);
-    leafletMap.current = map;
-    updateMarkers(map);
-  };
+  // Load Leaflet + init map
+  useEffect(()=>{
+    if(!document.getElementById("leaflet-css")) {
+      const l=document.createElement("link");
+      l.id="leaflet-css"; l.rel="stylesheet";
+      l.href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+      document.head.appendChild(l);
+    }
+    const init=()=>{
+      if(!mapRef.current||leafMap.current) return;
+      const m=window.L.map(mapRef.current,{center:[40.4093,49.8671],zoom:10,zoomControl:true});
+      window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        {subdomains:"abcd",maxZoom:19}).addTo(m);
+      leafMap.current=m;
+    };
+    if(window.L) init();
+    else {
+      const s=document.createElement("script");
+      s.src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      s.onload=init;
+      document.head.appendChild(s);
+    }
+    return ()=>{ if(leafMap.current){leafMap.current.remove();leafMap.current=null;} };
+  },[]);
 
-  const updateMarkers = (map, geo)=>{
-    if(!map||!window.L) return;
-    const geoData = geo||geocoded;
-    // Clear old markers
-    markersRef.current.forEach(m=>m.remove());
-    markersRef.current = [];
-    const bounds = [];
-    questsWithLocation.forEach(q=>{
-      const coords = geoData[q.id];
-      if(!coords) return;
-      const lat = coords.lat;
-      const lng = coords.lng;
-      if(isNaN(lat)||isNaN(lng)) return;
-      const statusColor = q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":q.status==="Abandoned"?"#FF7878":"#A8FF78";
-      const emoji = q.emoji||"⚔";
-      // Custom emoji marker
-      const icon = window.L.divIcon({
-        html:`<div style="
-          width:44px;height:44px;border-radius:14px;
-          background:rgba(12,12,16,0.92);
-          border:2px solid ${statusColor};
-          display:flex;align-items:center;justify-content:center;
-          font-size:22px;cursor:pointer;
-          box-shadow:0 4px 20px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.05);
-          backdrop-filter:blur(8px);
-          transition:transform 0.15s;
-        ">${emoji}</div>`,
-        className:"",
-        iconSize:[44,44],
-        iconAnchor:[22,22],
-        popupAnchor:[0,-24],
+  // Add/update markers whenever coords or filter changes
+  useEffect(()=>{
+    if(!leafMap.current||!window.L) return;
+    // Clear markers
+    markers.current.forEach(m=>m.remove());
+    markers.current=[];
+    const bounds=[];
+    filtered.forEach(q=>{
+      const c=coords[q.id];
+      if(!c) return;
+      const sc=q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":q.status==="Abandoned"?"#FF7878":"#A8FF78";
+      const em=q.emoji||"⚔";
+      const icon=window.L.divIcon({
+        html:`<div style="width:44px;height:44px;border-radius:14px;background:rgba(10,10,14,0.94);border:2.5px solid ${sc};display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);transition:transform 0.15s;">${em}</div>`,
+        className:"",iconSize:[44,44],iconAnchor:[22,22],
       });
-      const marker = window.L.marker([lat,lng],{icon}).addTo(map);
-      marker.on("click",()=>{ setSelected(q); });
-      markersRef.current.push(marker);
-      bounds.push([lat,lng]);
+      const mk=window.L.marker([c.lat,c.lng],{icon}).addTo(leafMap.current);
+      mk.on("click",()=>setSelected(q));
+      markers.current.push(mk);
+      bounds.push([c.lat,c.lng]);
     });
-    if(bounds.length>0) {
-      try { map.fitBounds(bounds, {padding:[40,40], maxZoom:13}); } catch{}
+    if(bounds.length>0){
+      try{leafMap.current.fitBounds(bounds,{padding:[50,50],maxZoom:14,animate:true});}catch{}
     }
-  };
+  },[coords,filter]);
 
-  // Update markers when geocoded data changes
+  // Fly to selected
   useEffect(()=>{
-    if(leafletMap.current&&window.L&&Object.keys(geocoded).length>0) {
-      updateMarkers(leafletMap.current, geocoded);
-    }
-  },[geocoded]);
-
-  // Update markers when filter changes
-  useEffect(()=>{
-    if(leafletMap.current&&window.L) {
-      markersRef.current.forEach(m=>m.remove());
-      markersRef.current=[];
-      const bounds=[];
-      filtered.forEach(q=>{
-        const coords=geocoded[q.id];
-        if(!coords) return;
-        const lat=coords.lat;
-        const lng=coords.lng;
-        if(isNaN(lat)||isNaN(lng)) return;
-        const statusColor=q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":"#A8FF78";
-        const emoji=q.emoji||"⚔";
-        const icon=window.L.divIcon({
-          html:`<div style="width:44px;height:44px;border-radius:14px;background:rgba(12,12,16,0.92);border:2px solid ${statusColor};display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.6);backdrop-filter:blur(8px);">${emoji}</div>`,
-          className:"",iconSize:[44,44],iconAnchor:[22,22],
-        });
-        const marker=window.L.marker([lat,lng],{icon}).addTo(leafletMap.current);
-        marker.on("click",()=>setSelected(q));
-        markersRef.current.push(marker);
-        bounds.push([lat,lng]);
-      });
-      if(bounds.length>0) {
-        try { leafletMap.current.fitBounds(bounds,{padding:[40,40],maxZoom:13}); } catch{}
-      }
-    }
-  },[filter]);
-
-  // Fly to selected quest
-  useEffect(()=>{
-    if(selected&&leafletMap.current&&geocoded[selected.id]) {
-      leafletMap.current.flyTo(
-        [geocoded[selected.id].lat,geocoded[selected.id].lng],
-        15, {duration:1.2, easeLinearity:0.25}
-      );
+    if(selected&&coords[selected.id]&&leafMap.current){
+      leafMap.current.flyTo([coords[selected.id].lat,coords[selected.id].lng],15,{duration:1});
     }
   },[selected]);
 
-  const palette = selected?getPalette(selected.id):null;
+  const palette=selected?getPalette(selected.id):null;
+  const mappedCount=filtered.filter(q=>coords[q.id]).length;
 
-  return (
-    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 140px)",overflow:"hidden"}}>
-      {/* Filter pills */}
-      <div style={{padding:"16px 20px 10px",display:"flex",gap:7,overflowX:"auto",
-        WebkitOverflowScrolling:"touch",flexShrink:0}}>
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 140px)"}}>
+      <style>{`
+        .leaflet-container{background:#08080A;}
+        .leaflet-control-zoom{border:1px solid rgba(255,255,255,0.08)!important;border-radius:10px!important;overflow:hidden;}
+        .leaflet-control-zoom a{background:rgba(12,12,16,0.9)!important;color:rgba(255,255,255,0.5)!important;border-color:rgba(255,255,255,0.08)!important;}
+        .leaflet-control-zoom a:hover{background:rgba(255,255,255,0.08)!important;color:#fff!important;}
+        .leaflet-control-attribution{display:none!important;}
+      `}</style>
+
+      {/* Filter row */}
+      <div style={{padding:"14px 20px 10px",display:"flex",gap:7,overflowX:"auto",flexShrink:0}}>
         {["All","Active","Completed","On Hold"].map(s=>{
-          const active=filter===s;
-          const color=s==="All"?"#F0F0F0":STATUS_META[s]?.color||"#F0F0F0";
+          const on=filter===s;
+          const col=s==="All"?"#F0F0F0":STATUS_META[s]?.color||"#F0F0F0";
+          const cnt=s==="All"?withLoc.length:withLoc.filter(q=>q.status===s).length;
           return(
             <button key={s} onClick={()=>setFilter(s)} style={{
-              padding:"6px 14px",borderRadius:20,fontSize:11,fontWeight:600,
-              cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
-              border:`1px solid ${active?color:"rgba(255,255,255,0.09)"}`,
-              background:active?`${color}15`:"transparent",
-              color:active?color:"rgba(255,255,255,0.3)",
-              transition:"all 0.2s",flexShrink:0,
-            }}>{s} {s==="All"?questsWithLocation.length:questsWithLocation.filter(q=>q.status===s).length}</button>
+              padding:"6px 14px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",
+              whiteSpace:"nowrap",fontFamily:"'DM Sans',sans-serif",flexShrink:0,
+              border:`1px solid ${on?col:"rgba(255,255,255,0.09)"}`,
+              background:on?`${col}15`:"transparent",
+              color:on?col:"rgba(255,255,255,0.3)",transition:"all 0.2s",
+            }}>{s} {cnt}</button>
           );
         })}
       </div>
 
-      {questsWithLocation.length===0?(
-        <div style={{textAlign:"center",padding:"80px 24px",flex:1}}>
-          <div style={{fontSize:48,marginBottom:16,opacity:0.15}}>📍</div>
+      {withLoc.length===0?(
+        <div style={{textAlign:"center",padding:"80px 24px"}}>
+          <div style={{fontSize:48,marginBottom:16,opacity:0.12}}>📍</div>
           <p style={{fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
             No quests with locations yet.<br/>Add a location when creating a quest.
           </p>
         </div>
       ):(
-        <div style={{flex:1,position:"relative",overflow:"hidden"}}>
-          {/* Map */}
+        <div style={{flex:1,position:"relative",minHeight:0}}>
           <div ref={mapRef} style={{width:"100%",height:"100%"}}/>
 
-          {/* Custom map styles */}
-          <style>{`
-            .leaflet-container { background:#0A0A0C; font-family:'DM Sans',sans-serif; }
-            .leaflet-control-zoom { border:1px solid rgba(255,255,255,0.08)!important; border-radius:12px!important; overflow:hidden; }
-            .leaflet-control-zoom a { background:rgba(12,12,16,0.9)!important; color:rgba(255,255,255,0.6)!important; border-color:rgba(255,255,255,0.08)!important; width:32px!important; height:32px!important; line-height:32px!important; }
-            .leaflet-control-zoom a:hover { background:rgba(255,255,255,0.08)!important; color:#fff!important; }
-            .leaflet-control-attribution { display:none!important; }
-          `}</style>
+          {/* Loading overlay */}
+          {loading&&(
+            <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",zIndex:999,
+              background:"rgba(10,10,14,0.9)",backdropFilter:"blur(8px)",
+              border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
+              padding:"7px 14px",display:"flex",alignItems:"center",gap:7,
+              fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif"}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#A8FF78",
+                animation:"pulseDot 1s ease-in-out infinite"}}/>
+              Mapping locations…
+            </div>
+          )}
+
+          {/* Stats badge */}
+          {!loading&&(
+            <div style={{position:"absolute",top:12,right:12,zIndex:999,
+              background:"rgba(10,10,14,0.88)",backdropFilter:"blur(8px)",
+              border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
+              padding:"5px 12px",fontSize:11,fontWeight:600,
+              color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif"}}>
+              {mappedCount}/{filtered.length} on map
+            </div>
+          )}
 
           {/* Selected quest card */}
           {selected&&(
-            <div style={{
-              position:"absolute",bottom:16,left:16,right:16,zIndex:1000,
+            <div style={{position:"absolute",bottom:16,left:16,right:16,zIndex:1000,
               background:"linear-gradient(160deg,rgba(14,14,18,0.97),rgba(10,10,14,0.97))",
-              backdropFilter:"blur(20px)",
-              border:`1px solid ${palette.color}30`,
-              borderRadius:20,padding:"16px",
-              boxShadow:"0 8px 40px rgba(0,0,0,0.7)",
-              animation:"cardIn 0.3s ease both",
-            }}>
+              backdropFilter:"blur(20px)",border:`1px solid ${palette.color}30`,
+              borderRadius:20,padding:"16px",boxShadow:"0 8px 40px rgba(0,0,0,0.7)",
+              animation:"cardIn 0.3s ease both"}}>
               <div style={{position:"absolute",top:0,left:0,right:0,height:2,
                 background:palette.grad,borderRadius:"20px 20px 0 0"}}/>
               <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
@@ -3624,7 +3546,7 @@ function QuestMapPage({ quests }) {
                     fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3,wordBreak:"break-word"}}>
                     {selected.title}
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5,flexWrap:"wrap"}}>
                     <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.08em",
                       textTransform:"uppercase",color:STATUS_META[selected.status]?.color||"#A8FF78",
                       background:`${STATUS_META[selected.status]?.color||"#A8FF78"}15`,
@@ -3633,57 +3555,17 @@ function QuestMapPage({ quests }) {
                       {selected.status}
                     </span>
                     {selected.location?.name&&<span style={{fontSize:11,color:"rgba(255,255,255,0.35)",
-                      fontFamily:"'DM Sans',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      📍 {selected.location.name}
-                    </span>}
+                      fontFamily:"'DM Sans',sans-serif"}}>📍 {selected.location.name}</span>}
                   </div>
-                  {selected.description&&<div style={{fontSize:12,color:"rgba(255,255,255,0.3)",
-                    fontFamily:"'DM Sans',sans-serif",marginTop:5,lineHeight:1.5,
-                    display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
-                    {selected.description}
-                  </div>}
                 </div>
                 <button onClick={()=>setSelected(null)} style={{
                   background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
-                  borderRadius:8,padding:"5px 6px",cursor:"pointer",color:"rgba(255,255,255,0.4)",
-                  flexShrink:0}}>
+                  borderRadius:8,padding:"5px 6px",cursor:"pointer",color:"rgba(255,255,255,0.4)",flexShrink:0}}>
                   <Icon d={Icons.x} size={14}/>
                 </button>
               </div>
             </div>
           )}
-
-          {/* Quest count badge */}
-          <div style={{position:"absolute",top:12,right:12,zIndex:999,
-            background:"rgba(10,10,14,0.85)",backdropFilter:"blur(8px)",
-            border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
-            padding:"5px 10px",fontSize:11,fontWeight:600,
-            color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif",
-            display:"flex",alignItems:"center",gap:6}}>
-            {Object.values(geocodeStatus).some(s=>s==="loading")&&(
-              <div style={{width:8,height:8,borderRadius:"50%",
-                background:"#A8FF78",animation:"pulseDot 1s ease-in-out infinite"}}/>
-            )}
-            {Object.keys(geocoded).length}/{filtered.length} mapped
-          </div>
-
-          {/* Legend */}
-          <div style={{position:"absolute",top:12,left:12,zIndex:999,
-            background:"rgba(10,10,14,0.85)",backdropFilter:"blur(8px)",
-            border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
-            padding:"8px 10px",display:"flex",flexDirection:"column",gap:5}}>
-            {[
-              {c:"#A8FF78",l:"Active"},
-              {c:"#78C1FF",l:"Done"},
-              {c:"#FBBF24",l:"On Hold"},
-            ].map(({c,l})=>(
-              <div key={l} style={{display:"flex",alignItems:"center",gap:5}}>
-                <div style={{width:8,height:8,borderRadius:2,background:c}}/>
-                <span style={{fontSize:9,color:"rgba(255,255,255,0.4)",
-                  fontFamily:"'DM Sans',sans-serif"}}>{l}</span>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>
