@@ -638,7 +638,39 @@ function MapView({location,height=200}){
 // ─── LOCATION SEARCH ─────────────────────────────────────────────────────────
 function LocationSearch({value,onChange}){
   const [query,setQuery]=useState(value?.name||"");
-  const handleSet=()=>{if(!query.trim())return;onChange({name:query.trim()});};
+  const [loading,setLoading]=useState(false);
+
+  const handleSet=async()=>{
+    if(!query.trim()) return;
+    setLoading(true);
+    // Try to geocode immediately so lat/lng are saved with the quest
+    try {
+      const searches = [
+        query.trim() + ", Azerbaijan",
+        query.trim() + ", Baku",
+        query.trim(),
+      ];
+      let found = false;
+      for(const s of searches) {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(s)}&format=json&limit=1`,
+          {headers:{"User-Agent":"SideQuestsApp/1.0"}}
+        );
+        const d = await r.json();
+        if(d[0]) {
+          onChange({name:query.trim(), lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)});
+          found = true;
+          break;
+        }
+        await new Promise(res=>setTimeout(res,150));
+      }
+      if(!found) onChange({name:query.trim()});
+    } catch {
+      onChange({name:query.trim()});
+    }
+    setLoading(false);
+  };
+
   const clear=()=>{onChange(null);setQuery("");};
   return(
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -655,9 +687,11 @@ function LocationSearch({value,onChange}){
             onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.25)"}
             onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.12)"}/>
         </div>
-        <button onClick={handleSet} style={{padding:"0 18px",borderRadius:12,border:"none",cursor:"pointer",
+        <button onClick={handleSet} disabled={loading} style={{padding:"0 18px",borderRadius:12,border:"none",cursor:"pointer",
           background:"rgba(168,255,120,0.15)",color:"#A8FF78",fontSize:13,fontWeight:700,
-          fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>Set</button>
+          fontFamily:"'DM Sans',sans-serif",flexShrink:0,opacity:loading?0.6:1}}>
+          {loading?"…":"Set"}
+        </button>
       </div>
       <p style={{fontSize:11,color:"rgba(255,255,255,0.22)",margin:0,fontFamily:"'DM Sans',sans-serif"}}>
         Type any place and press Set or Enter — map appears instantly.
@@ -3326,10 +3360,23 @@ function QuestMapPage({ quests }) {
   const markersRef = useRef([]);
 
   const [geocoded, setGeocoded] = useState({});
+  // Separate quests that already have coords from ones that need geocoding
   const questsWithLocation = quests.filter(q=>q.location?.name);
+  const alreadyGeocoded = questsWithLocation.filter(q=>q.location?.lat&&q.location?.lng);
   const filtered = filter==="All"?questsWithLocation:questsWithLocation.filter(q=>q.status===filter);
 
-  const [geocodeStatus, setGeocodeStatus] = useState({}); // track which ones tried
+  const [geocodeStatus, setGeocodeStatus] = useState({});
+
+  // Pre-populate coords for quests that already have lat/lng stored
+  useEffect(()=>{
+    const withCoords = {};
+    questsWithLocation.forEach(q=>{
+      if(q.location?.lat&&q.location?.lng) {
+        withCoords[q.id] = {lat:q.location.lat, lng:q.location.lng};
+      }
+    });
+    if(Object.keys(withCoords).length>0) setGeocoded(prev=>({...prev,...withCoords}));
+  },[quests.length]);
 
   // Geocode all location names using Nominatim (free, no key needed)
   useEffect(()=>{
