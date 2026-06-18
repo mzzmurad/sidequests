@@ -694,7 +694,7 @@ function LocationSearch({value,onChange}){
         </button>
       </div>
       <p style={{fontSize:11,color:"rgba(255,255,255,0.22)",margin:0,fontFamily:"'DM Sans',sans-serif"}}>
-        Type any place and press Set or Enter — map appears instantly.
+        Type a real place name and press Set — coordinates are saved for the map.
       </p>
       {value?.name&&(
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:10,
@@ -3452,9 +3452,10 @@ function QuestMapPage({ quests }) {
       const c=coords[q.id];
       if(!c) return;
       const sc=q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":q.status==="Abandoned"?"#FF7878":"#A8FF78";
-      const em=q.emoji||"⚔";
+      const em=q.emoji||(q.title?q.title[0].toUpperCase():"⚔");
+      const fontSize=q.emoji?"22px":"16px";
       const icon=window.L.divIcon({
-        html:`<div style="width:44px;height:44px;border-radius:14px;background:rgba(10,10,14,0.94);border:2.5px solid ${sc};display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);transition:transform 0.15s;">${em}</div>`,
+        html:`<div style="width:44px;height:44px;border-radius:14px;background:rgba(10,10,14,0.94);border:2.5px solid ${sc};display:flex;align-items:center;justify-content:center;font-size:${fontSize};cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);transition:transform 0.15s;color:#F2F2F2;font-weight:700;font-family:'DM Sans',sans-serif;">${em}</div>`,
         className:"",iconSize:[44,44],iconAnchor:[22,22],
       });
       const mk=window.L.marker([c.lat,c.lng],{icon}).addTo(leafMap.current);
