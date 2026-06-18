@@ -582,12 +582,12 @@ function EmojiPicker({value,onChange}){
       {open&&createPortal(
         <>
           {/* Backdrop */}
-          <div style={{position:"fixed",inset:0,zIndex:9990,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(4px)"}}
+          <div style={{position:"fixed",inset:0,zIndex:99990,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(4px)"}}
             onClick={()=>setOpen(false)}/>
           {/* Panel */}
           <div style={{
             position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
-            width:"min(420px, 92vw)",zIndex:9991,
+            width:"min(420px, 92vw)",zIndex:99991,
             background:"#0E0E12",border:"1px solid rgba(255,255,255,0.12)",borderRadius:20,
             overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.95)",
             maxHeight:"70vh",display:"flex",flexDirection:"column",
