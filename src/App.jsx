@@ -3325,8 +3325,32 @@ function QuestMapPage({ quests }) {
   const leafletMap = useRef(null);
   const markersRef = useRef([]);
 
-  const questsWithLocation = quests.filter(q=>q.location?.lat&&q.location?.lng);
+  const [geocoded, setGeocoded] = useState({});
+  const questsWithLocation = quests.filter(q=>q.location?.name);
   const filtered = filter==="All"?questsWithLocation:questsWithLocation.filter(q=>q.status===filter);
+
+  // Geocode all location names using Nominatim (free, no key needed)
+  useEffect(()=>{
+    const toGeocode = questsWithLocation.filter(q=>!geocoded[q.id]&&q.location?.name);
+    if(toGeocode.length===0) return;
+    // Geocode one at a time to respect rate limits
+    let i = 0;
+    const next = async()=>{
+      if(i>=toGeocode.length) return;
+      const q = toGeocode[i++];
+      try {
+        const query = encodeURIComponent(q.location.name + " Azerbaijan");
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
+          {headers:{"User-Agent":"SideQuestsApp/1.0"}});
+        const d = await r.json();
+        if(d[0]) {
+          setGeocoded(prev=>({...prev,[q.id]:{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}}));
+        }
+      } catch{}
+      setTimeout(next, 300); // rate limit
+    };
+    next();
+  },[questsWithLocation.length]);
 
   // Load Leaflet dynamically
   useEffect(()=>{
@@ -3364,16 +3388,18 @@ function QuestMapPage({ quests }) {
     updateMarkers(map);
   };
 
-  const updateMarkers = (map)=>{
+  const updateMarkers = (map, geo)=>{
     if(!map||!window.L) return;
+    const geoData = geo||geocoded;
     // Clear old markers
     markersRef.current.forEach(m=>m.remove());
     markersRef.current = [];
     const bounds = [];
     questsWithLocation.forEach(q=>{
-      if(!q.location?.lat||!q.location?.lng) return;
-      const lat = parseFloat(q.location.lat);
-      const lng = parseFloat(q.location.lng);
+      const coords = geoData[q.id];
+      if(!coords) return;
+      const lat = coords.lat;
+      const lng = coords.lng;
       if(isNaN(lat)||isNaN(lng)) return;
       const statusColor = q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":q.status==="Abandoned"?"#FF7878":"#A8FF78";
       const emoji = q.emoji||"⚔";
@@ -3404,6 +3430,13 @@ function QuestMapPage({ quests }) {
     }
   };
 
+  // Update markers when geocoded data changes
+  useEffect(()=>{
+    if(leafletMap.current&&window.L&&Object.keys(geocoded).length>0) {
+      updateMarkers(leafletMap.current, geocoded);
+    }
+  },[geocoded]);
+
   // Update markers when filter changes
   useEffect(()=>{
     if(leafletMap.current&&window.L) {
@@ -3411,9 +3444,10 @@ function QuestMapPage({ quests }) {
       markersRef.current=[];
       const bounds=[];
       filtered.forEach(q=>{
-        if(!q.location?.lat||!q.location?.lng) return;
-        const lat=parseFloat(q.location.lat);
-        const lng=parseFloat(q.location.lng);
+        const coords=geocoded[q.id];
+        if(!coords) return;
+        const lat=coords.lat;
+        const lng=coords.lng;
         if(isNaN(lat)||isNaN(lng)) return;
         const statusColor=q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":"#A8FF78";
         const emoji=q.emoji||"⚔";
@@ -3434,9 +3468,9 @@ function QuestMapPage({ quests }) {
 
   // Fly to selected quest
   useEffect(()=>{
-    if(selected&&leafletMap.current&&selected.location?.lat) {
+    if(selected&&leafletMap.current&&geocoded[selected.id]) {
       leafletMap.current.flyTo(
-        [parseFloat(selected.location.lat),parseFloat(selected.location.lng)],
+        [geocoded[selected.id].lat,geocoded[selected.id].lng],
         15, {duration:1.2, easeLinearity:0.25}
       );
     }
