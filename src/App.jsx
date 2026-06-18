@@ -558,45 +558,61 @@ function MiniAvatar({name,size=32,overlap=false}){
 // ─── EMOJI PICKER ─────────────────────────────────────────────────────────────
 function EmojiPicker({value,onChange}){
   const [open,setOpen]=useState(false);
-  const [activeGroup,setActiveGroup]=useState("🔥 Hype");
-  const ref=useRef(null);
-  useEffect(()=>{
-    const h=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
-    document.addEventListener("mousedown",h);
-    return()=>document.removeEventListener("mousedown",h);
-  },[]);
+  const [activeGroup,setActiveGroup]=useState(Object.keys(EMOJI_GROUPS)[0]);
+
+  const groups = Object.keys(EMOJI_GROUPS);
+
   return(
-    <div ref={ref} style={{position:"relative"}}>
-      <button onClick={()=>setOpen(o=>!o)} style={{
+    <div style={{position:"relative"}}>
+      <button type="button" onClick={()=>setOpen(o=>!o)} style={{
         display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderRadius:12,
         cursor:"pointer",background:open?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.04)",
         border:`1px solid ${open?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.09)"}`,
         transition:"all 0.2s",width:"100%",
       }}>
         <span style={{fontSize:22,lineHeight:1}}>{value||"✨"}</span>
-        <span style={{fontSize:13,color:value?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>
+        <span style={{fontSize:13,color:value?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.3)",
+          fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>
           {value?"Change emoji":"Pick an emoji"}
         </span>
-        {value&&<button onClick={e=>{e.stopPropagation();onChange("");}} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:13}}>✕</button>}
+        {value&&<span onClickCapture={e=>{e.stopPropagation();onChange("");setOpen(false);}}
+          style={{marginLeft:"auto",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:13,padding:"2px 4px"}}>✕</span>}
       </button>
+
       {open&&createPortal(
-        <div style={{position:"fixed",inset:0,zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
-          onClick={()=>setOpen(false)}>
+        <>
+          {/* Backdrop */}
+          <div style={{position:"fixed",inset:0,zIndex:9990,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(4px)"}}
+            onClick={()=>setOpen(false)}/>
+          {/* Panel */}
           <div style={{
-            width:"100%",maxWidth:420,
-            zIndex:9999,
-            background:"#0E0E12",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,
-            overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.9)",
-            animation:"cardIn 0.2s ease both",maxHeight:"70vh",display:"flex",flexDirection:"column",
-          }} onClick={e=>e.stopPropagation()}>
+            position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+            width:"min(420px, 92vw)",zIndex:9991,
+            background:"#0E0E12",border:"1px solid rgba(255,255,255,0.12)",borderRadius:20,
+            overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.95)",
+            maxHeight:"70vh",display:"flex",flexDirection:"column",
+          }}>
+            {/* Header */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+              padding:"14px 16px 0",flexShrink:0}}>
+              <span style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.06em",textTransform:"uppercase"}}>
+                Pick an emoji
+              </span>
+              <button type="button" onClick={()=>setOpen(false)} style={{
+                background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+                borderRadius:8,padding:"4px 6px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+                <Icon d={Icons.x} size={14}/>
+              </button>
+            </div>
             {/* Category tabs */}
             <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid rgba(255,255,255,0.07)",
-              padding:"8px 8px 0",gap:3,flexShrink:0,WebkitOverflowScrolling:"touch"}}>
-              {Object.keys(EMOJI_GROUPS).map(g=>(
-                <button key={g} onClick={()=>setActiveGroup(g)} style={{
+              padding:"10px 10px 0",gap:3,flexShrink:0,WebkitOverflowScrolling:"touch"}}>
+              {groups.map(g=>(
+                <button type="button" key={g} onClick={()=>setActiveGroup(g)} style={{
                   flexShrink:0,padding:"5px 10px",borderRadius:"8px 8px 0 0",
                   background:activeGroup===g?"rgba(255,255,255,0.08)":"transparent",
-                  border:"none",borderBottom:activeGroup===g?"2px solid rgba(255,255,255,0.5)":"2px solid transparent",
+                  border:"none",borderBottom:activeGroup===g?"2px solid rgba(255,255,255,0.6)":"2px solid transparent",
                   color:activeGroup===g?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",
                   cursor:"pointer",fontSize:11,fontWeight:600,
                   fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",transition:"all 0.15s",
@@ -604,21 +620,22 @@ function EmojiPicker({value,onChange}){
               ))}
             </div>
             {/* Emoji grid */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:4,padding:12,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:4,
+              padding:12,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
               {(EMOJI_GROUPS[activeGroup]||[]).map((em,i)=>(
-                <button key={i} onClick={()=>{onChange(em);setOpen(false);}} style={{
-                  fontSize:24,padding:"8px",borderRadius:10,border:"none",
-                  background:value===em?"rgba(255,255,255,0.12)":"transparent",
-                  cursor:"pointer",transition:"all 0.1s",lineHeight:1,aspectRatio:"1",
-                  boxShadow:value===em?"inset 0 0 0 1px rgba(255,255,255,0.2)":"none",
+                <button type="button" key={i} onClick={()=>{onChange(em);setOpen(false);}} style={{
+                  fontSize:26,padding:"8px",borderRadius:10,border:"none",
+                  background:value===em?"rgba(255,255,255,0.15)":"transparent",
+                  cursor:"pointer",lineHeight:1,aspectRatio:"1",
+                  outline:value===em?"2px solid rgba(255,255,255,0.3)":"none",
                 }}
                   onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}
-                  onMouseLeave={e=>e.currentTarget.style.background=value===em?"rgba(255,255,255,0.12)":"transparent"}
+                  onMouseLeave={e=>e.currentTarget.style.background=value===em?"rgba(255,255,255,0.15)":"transparent"}
                 >{em}</button>
               ))}
             </div>
           </div>
-        </div>,
+        </>,
         document.body
       )}
     </div>
