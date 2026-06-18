@@ -637,70 +637,105 @@ function MapView({location,height=200}){
 
 // ─── LOCATION SEARCH ─────────────────────────────────────────────────────────
 function LocationSearch({value,onChange}){
-  const [query,setQuery]=useState(value?.name||"");
-  const [loading,setLoading]=useState(false);
+  const [query,setQuery]       = useState(value?.name||"");
+  const [suggestions,setSugg]  = useState([]);
+  const [loading,setLoading]   = useState(false);
+  const [showSugg,setShowSugg] = useState(false);
+  const debounce = useRef(null);
 
-  const handleSet=async()=>{
-    if(!query.trim()) return;
+  const search = async(q)=>{
+    if(!q||q.length<2){ setSugg([]); return; }
     setLoading(true);
-    // Try to geocode immediately so lat/lng are saved with the quest
     try {
-      const searches = [
-        query.trim() + " Azerbaijan",
-        query.trim() + " Baku",
-        query.trim(),
-      ];
-      let found = false;
-      for(const s of searches) {
-        try {
-          const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(s)}&limit=1`);
-          const d = await r.json();
-          if(d&&d.features&&d.features[0]) {
-            const [lng,lat] = d.features[0].geometry.coordinates;
-            onChange({name:query.trim(), lat, lng});
-            found = true;
-            break;
-          }
-        } catch{}
-        await new Promise(res=>setTimeout(res,200));
-      }
-      if(!found) onChange({name:query.trim()});
-    } catch {
-      onChange({name:query.trim()});
-    }
+      // Search with Baku/Azerbaijan bias first
+      const res = await fetch(
+        `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lat=40.4093&lon=49.8671`
+      );
+      const d = await res.json();
+      if(d?.features) setSugg(d.features);
+    } catch{}
     setLoading(false);
   };
 
-  const clear=()=>{onChange(null);setQuery("");};
+  const onType=(e)=>{
+    const v=e.target.value;
+    setQuery(v);
+    setShowSugg(true);
+    clearTimeout(debounce.current);
+    debounce.current=setTimeout(()=>search(v),350);
+  };
+
+  const pick=(feat)=>{
+    const [lng,lat]=feat.geometry.coordinates;
+    const p=feat.properties;
+    const name=[p.name,p.city||p.county,p.country].filter(Boolean).join(", ");
+    onChange({name:p.name||name, lat, lng});
+    setQuery(p.name||name);
+    setSugg([]);
+    setShowSugg(false);
+  };
+
+  const clear=()=>{onChange(null);setQuery("");setSugg([]);};
+
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <div style={{display:"flex",gap:8}}>
-        <div style={{position:"relative",flex:1}}>
-          <div style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
-            <Icon d={Icons.search} size={15} stroke="rgba(255,255,255,0.3)"/>
-          </div>
-          <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSet()}
-            placeholder="e.g. Baku, Nizami Street, Ganja…"
-            style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.12)",
-              borderRadius:12,padding:"12px 12px 12px 38px",color:"#F0F0F0",fontSize:13.5,outline:"none",
-              fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",transition:"border-color 0.2s"}}
-            onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.25)"}
-            onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.12)"}/>
+    <div style={{display:"flex",flexDirection:"column",gap:8,position:"relative"}}>
+      <div style={{position:"relative"}}>
+        <div style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",zIndex:1}}>
+          {loading
+            ? <div style={{width:14,height:14,border:"2px solid rgba(255,255,255,0.1)",borderTopColor:"rgba(255,255,255,0.5)",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+            : <Icon d={Icons.search} size={15} stroke="rgba(255,255,255,0.3)"/>
+          }
         </div>
-        <button onClick={handleSet} disabled={loading} style={{padding:"0 18px",borderRadius:12,border:"none",cursor:"pointer",
-          background:"rgba(168,255,120,0.15)",color:"#A8FF78",fontSize:13,fontWeight:700,
-          fontFamily:"'DM Sans',sans-serif",flexShrink:0,opacity:loading?0.6:1}}>
-          {loading?"…":"Set"}
-        </button>
+        <input value={query} onChange={onType}
+          onFocus={()=>setShowSugg(true)}
+          onBlur={()=>setTimeout(()=>setShowSugg(false),200)}
+          placeholder="Search for a place…"
+          style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.12)",
+            borderRadius:12,padding:"12px 12px 12px 38px",color:"#F0F0F0",fontSize:13.5,outline:"none",
+            fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",transition:"border-color 0.2s"}}
+          onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.25)"}
+          onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.12)"}/>
+
+        {/* Suggestions dropdown */}
+        {showSugg&&suggestions.length>0&&(
+          <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,zIndex:9999,
+            background:"linear-gradient(160deg,#111114,#0D0D10)",
+            border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,
+            overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.7)"}}>
+            {suggestions.map((feat,i)=>{
+              const p=feat.properties;
+              const main=p.name||p.street||"Unknown";
+              const sub=[p.city||p.county,p.country].filter(Boolean).join(", ");
+              return(
+                <button key={i} onMouseDown={()=>pick(feat)} style={{
+                  width:"100%",padding:"11px 14px",cursor:"pointer",textAlign:"left",border:"none",
+                  background:"transparent",borderBottom:i<suggestions.length-1?"1px solid rgba(255,255,255,0.05)":"none",
+                  transition:"background 0.1s",display:"flex",flexDirection:"column",gap:2}}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{fontSize:13,fontWeight:600,color:"#F0F0F0",fontFamily:"'DM Sans',sans-serif"}}>
+                    📍 {main}
+                  </span>
+                  {sub&&<span style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
+                    {sub}
+                  </span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
-      <p style={{fontSize:11,color:"rgba(255,255,255,0.22)",margin:0,fontFamily:"'DM Sans',sans-serif"}}>
-        Type a real place name and press Set — coordinates are saved for the map.
-      </p>
+
       {value?.name&&(
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:10,
           background:"rgba(168,255,120,0.06)",border:"1px solid rgba(168,255,120,0.18)"}}>
           <Icon d={Icons.pin} size={13} stroke="#A8FF78" fill="rgba(168,255,120,0.2)"/>
-          <span style={{fontSize:12.5,color:"rgba(255,255,255,0.65)",fontFamily:"'DM Sans',sans-serif",flex:1}}>{value.name}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12.5,color:"rgba(255,255,255,0.65)",fontFamily:"'DM Sans',sans-serif"}}>{value.name}</div>
+            {value.lat&&<div style={{fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginTop:1}}>
+              📌 {Number(value.lat).toFixed(4)}, {Number(value.lng).toFixed(4)}
+            </div>}
+          </div>
           <button onClick={clear} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.25)",display:"flex",padding:2}}>
             <Icon d={Icons.x} size={12}/>
           </button>
