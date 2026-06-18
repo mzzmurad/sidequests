@@ -469,11 +469,16 @@ const calcXP = (quests) => {
 
 // ─── EMOJI PICKER DATA ────────────────────────────────────────────────────────
 const EMOJI_GROUPS={
-  "Adventure":["⚔","🏔","🗺","🧭","🏕","🚀","🛸","🌋","🏴‍☠","🗝","🔮","⚡","🌊","🦅","🐉","🌙","☄","🔥","💎","🏆"],
-  "Life":     ["❤","🎯","💡","📚","🎨","🎵","🍀","🌱","✨","🦋","🌸","🌈","🎭","🎪","🎲","🧩","🪄","🎁","🏠","👑"],
-  "People":   ["🤝","👥","💪","🧠","👁","🙌","✊","🫀","🧬","🤺","🧗","🏄","🧘","🥊","🎤","🎬","🎯","🏇","🤿","🪂"],
-  "Places":   ["🌍","🗼","🏯","🏛","🕌","⛩","🌁","🏖","🏜","🌃","🎡","🚂","✈","⛵","🌉","🏟","🗽","🎠","🌄","🏙"],
-  "Objects":  ["💰","📱","🔬","🧪","⚙","🔑","📜","🧲","💊","🎸","🎺","🥁","🎻","🔭","🪐","🧸","🪆","🎀","🧧","🪩"],
+  "🔥 Hype":    ["🔥","⚡","💥","🎯","🏆","👑","💎","🌟","✨","🎪","🎭","🎨","🎬","🎤","🎸","🥳","🎉","🎊","🏅","🥇"],
+  "🌍 Travel":  ["✈","🗺","🧭","🏕","🌋","🏔","🏖","🏜","🌊","🌁","🗼","🏛","🕌","⛩","🏯","🌃","🌄","🌉","🚀","🛸"],
+  "⚔ Quest":   ["⚔","🗡","🛡","🏴‍☠","🗝","🔮","🧙","🐉","🦅","🦁","🐺","🔱","☄","🌙","💫","🌠","🧿","🪬","⚜","🔰"],
+  "🤸 Active":  ["🥊","🏄","🧗","🤿","🪂","🏇","🧘","🤺","🏋","🚴","🏊","⛷","🏂","🤸","🎿","🥋","🎯","🎱","🎳","🏓"],
+  "🍕 Food":    ["🍕","🍣","🍜","🍔","🌮","🍷","🥂","🍻","☕","🧃","🍰","🎂","🍦","🍩","🥩","🍗","🌯","🥗","🍱","🧆"],
+  "😂 Funny":   ["😂","🤡","👻","💀","🤪","😈","🥴","😵","🤯","🫠","👽","🤖","👾","🎭","🃏","🎲","🪄","🎪","🤹","🎠"],
+  "❤ Feels":   ["❤","🧡","💛","💚","💙","💜","🖤","🤍","💕","💞","💓","💗","💖","💝","❣","💔","🫶","🤗","😍","🥰"],
+  "🌿 Chill":   ["🌿","🌱","🍀","🌸","🌺","🌻","🌹","🌴","🌵","🍄","🪴","🌾","🍂","🍁","🌊","☁","🌈","🌙","⭐","🌤"],
+  "🏠 Life":    ["🏠","💡","📚","🎵","🎮","📸","🎨","✏","📝","💻","📱","🔑","🧳","🛍","💰","💳","🧸","🪆","🎁","📦"],
+  "🐾 Animals": ["🦁","🐯","🦊","🐺","🦝","🐻","🐼","🐨","🦋","🦅","🦆","🦜","🐬","🦈","🐙","🦑","🦞","🐊","🦕","🦖"],
 };
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -574,36 +579,49 @@ function EmojiPicker({value,onChange}){
         </span>
         {value&&<button onClick={e=>{e.stopPropagation();onChange("");}} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:13}}>✕</button>}
       </button>
-      {open&&(
-        <div style={{position:"absolute",top:"calc(100% + 8px)",left:0,right:0,zIndex:9999,
-          background:"#0E0E12",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,overflow:"hidden",
-          boxShadow:"0 24px 64px rgba(0,0,0,0.7)",animation:"cardIn 0.2s ease both"}}>
-          <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid rgba(255,255,255,0.07)",padding:"8px 8px 0",gap:4}}>
-            {Object.keys(EMOJI_GROUPS).map(g=>(
-              <button key={g} onClick={()=>setActiveGroup(g)} style={{
-                flexShrink:0,padding:"6px 12px",borderRadius:"8px 8px 0 0",
-                background:activeGroup===g?"rgba(255,255,255,0.08)":"transparent",
-                border:"none",borderBottom:activeGroup===g?"2px solid rgba(255,255,255,0.5)":"2px solid transparent",
-                color:activeGroup===g?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",
-                cursor:"pointer",fontSize:11,fontWeight:600,letterSpacing:"0.05em",
-                fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",transition:"all 0.15s",
-              }}>{g}</button>
-            ))}
+      {open&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:9998}} onClick={()=>setOpen(false)}>
+          <div style={{
+            position:"fixed",
+            top: ref.current ? ref.current.getBoundingClientRect().bottom + 8 : 200,
+            left: ref.current ? ref.current.getBoundingClientRect().left : 20,
+            right: ref.current ? window.innerWidth - ref.current.getBoundingClientRect().right : 20,
+            zIndex:9999,
+            background:"#0E0E12",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,
+            overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.8)",
+            animation:"cardIn 0.2s ease both",maxHeight:"50vh",display:"flex",flexDirection:"column",
+          }} onClick={e=>e.stopPropagation()}>
+            {/* Category tabs */}
+            <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid rgba(255,255,255,0.07)",
+              padding:"8px 8px 0",gap:3,flexShrink:0}}>
+              {Object.keys(EMOJI_GROUPS).map(g=>(
+                <button key={g} onClick={()=>setActiveGroup(g)} style={{
+                  flexShrink:0,padding:"5px 10px",borderRadius:"8px 8px 0 0",
+                  background:activeGroup===g?"rgba(255,255,255,0.08)":"transparent",
+                  border:"none",borderBottom:activeGroup===g?"2px solid rgba(255,255,255,0.5)":"2px solid transparent",
+                  color:activeGroup===g?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",
+                  cursor:"pointer",fontSize:11,fontWeight:600,
+                  fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",transition:"all 0.15s",
+                }}>{g}</button>
+              ))}
+            </div>
+            {/* Emoji grid */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(10,1fr)",gap:2,padding:10,overflowY:"auto"}}>
+              {EMOJI_GROUPS[activeGroup].map((em,i)=>(
+                <button key={i} onClick={()=>{onChange(em);setOpen(false);}} style={{
+                  fontSize:22,padding:"7px",borderRadius:8,border:"none",
+                  background:value===em?"rgba(255,255,255,0.12)":"transparent",
+                  cursor:"pointer",transition:"all 0.1s",lineHeight:1,
+                  boxShadow:value===em?"inset 0 0 0 1px rgba(255,255,255,0.2)":"none",
+                }}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}
+                  onMouseLeave={e=>e.currentTarget.style.background=value===em?"rgba(255,255,255,0.12)":"transparent"}
+                >{em}</button>
+              ))}
+            </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(10,1fr)",gap:2,padding:10}}>
-            {EMOJI_GROUPS[activeGroup].map((em,i)=>(
-              <button key={i} onClick={()=>{onChange(em);setOpen(false);}} style={{
-                fontSize:20,padding:"7px",borderRadius:8,border:"none",
-                background:value===em?"rgba(255,255,255,0.12)":"transparent",
-                cursor:"pointer",transition:"all 0.1s",lineHeight:1,
-                boxShadow:value===em?"inset 0 0 0 1px rgba(255,255,255,0.2)":"none",
-              }}
-                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}
-                onMouseLeave={e=>e.currentTarget.style.background=value===em?"rgba(255,255,255,0.12)":"transparent"}
-              >{em}</button>
-            ))}
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
