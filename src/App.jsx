@@ -3329,25 +3329,58 @@ function QuestMapPage({ quests }) {
   const questsWithLocation = quests.filter(q=>q.location?.name);
   const filtered = filter==="All"?questsWithLocation:questsWithLocation.filter(q=>q.status===filter);
 
+  const [geocodeStatus, setGeocodeStatus] = useState({}); // track which ones tried
+
   // Geocode all location names using Nominatim (free, no key needed)
   useEffect(()=>{
-    const toGeocode = questsWithLocation.filter(q=>!geocoded[q.id]&&q.location?.name);
+    const toGeocode = questsWithLocation.filter(q=>!geocoded[q.id]&&!geocodeStatus[q.id]&&q.location?.name);
     if(toGeocode.length===0) return;
-    // Geocode one at a time to respect rate limits
     let i = 0;
     const next = async()=>{
       if(i>=toGeocode.length) return;
       const q = toGeocode[i++];
-      try {
-        const query = encodeURIComponent(q.location.name + " Azerbaijan");
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
-          {headers:{"User-Agent":"SideQuestsApp/1.0"}});
-        const d = await r.json();
-        if(d[0]) {
-          setGeocoded(prev=>({...prev,[q.id]:{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}}));
-        }
-      } catch{}
-      setTimeout(next, 300); // rate limit
+      setGeocodeStatus(prev=>({...prev,[q.id]:"loading"}));
+      // Try multiple search strategies
+      const searches = [
+        q.location.name,                                    // exact name
+        q.location.name + ", Azerbaijan",                   // + country
+        q.location.name + ", Baku",                        // + city
+        q.location.name.split(",")[0].trim() + " Azerbaijan", // first part + country
+      ];
+      let found = false;
+      for(const search of searches) {
+        try {
+          const query = encodeURIComponent(search);
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=az`,
+            {headers:{"User-Agent":"SideQuestsApp/1.0"}}
+          );
+          const d = await r.json();
+          if(d[0]) {
+            setGeocoded(prev=>({...prev,[q.id]:{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon),name:d[0].display_name}}));
+            setGeocodeStatus(prev=>({...prev,[q.id]:"done"}));
+            found = true;
+            break;
+          }
+        } catch{}
+        await new Promise(res=>setTimeout(res,200));
+      }
+      // If still not found, try without country restriction
+      if(!found) {
+        try {
+          const query = encodeURIComponent(q.location.name);
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
+            {headers:{"User-Agent":"SideQuestsApp/1.0"}}
+          );
+          const d = await r.json();
+          if(d[0]) {
+            setGeocoded(prev=>({...prev,[q.id]:{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}}));
+          }
+        } catch{}
+        setGeocodeStatus(prev=>({...prev,[q.id]:"done"}));
+      }
+      setTimeout(next, 350);
     };
     next();
   },[questsWithLocation.length]);
@@ -3578,8 +3611,31 @@ function QuestMapPage({ quests }) {
             background:"rgba(10,10,14,0.85)",backdropFilter:"blur(8px)",
             border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
             padding:"5px 10px",fontSize:11,fontWeight:600,
-            color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif"}}>
-            {filtered.length} quest{filtered.length!==1?"s":""}
+            color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif",
+            display:"flex",alignItems:"center",gap:6}}>
+            {Object.values(geocodeStatus).some(s=>s==="loading")&&(
+              <div style={{width:8,height:8,borderRadius:"50%",
+                background:"#A8FF78",animation:"pulseDot 1s ease-in-out infinite"}}/>
+            )}
+            {Object.keys(geocoded).length}/{filtered.length} mapped
+          </div>
+
+          {/* Legend */}
+          <div style={{position:"absolute",top:12,left:12,zIndex:999,
+            background:"rgba(10,10,14,0.85)",backdropFilter:"blur(8px)",
+            border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
+            padding:"8px 10px",display:"flex",flexDirection:"column",gap:5}}>
+            {[
+              {c:"#A8FF78",l:"Active"},
+              {c:"#78C1FF",l:"Done"},
+              {c:"#FBBF24",l:"On Hold"},
+            ].map(({c,l})=>(
+              <div key={l} style={{display:"flex",alignItems:"center",gap:5}}>
+                <div style={{width:8,height:8,borderRadius:2,background:c}}/>
+                <span style={{fontSize:9,color:"rgba(255,255,255,0.4)",
+                  fontFamily:"'DM Sans',sans-serif"}}>{l}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
