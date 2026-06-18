@@ -418,6 +418,27 @@ const getPalette=(id, colorIndex)=>{
   return QUEST_PALETTES[Math.abs(h)%QUEST_PALETTES.length];
 };
 
+// ─── QUEST CATEGORIES & DIFFICULTY ───────────────────────────────────────────
+const QUEST_CATEGORIES = [
+  {id:"adventure",  label:"Adventure",  icon:"🗺"},
+  {id:"social",     label:"Social",     icon:"🤝"},
+  {id:"food",       label:"Food",       icon:"🍕"},
+  {id:"fitness",    label:"Fitness",    icon:"💪"},
+  {id:"creative",   label:"Creative",   icon:"🎨"},
+  {id:"travel",     label:"Travel",     icon:"✈"},
+  {id:"chaos",      label:"Chaos",      icon:"🔥"},
+  {id:"personal",   label:"Personal",   icon:"🧠"},
+  {id:"challenge",  label:"Challenge",  icon:"⚔"},
+  {id:"night",      label:"Night Out",  icon:"🌙"},
+];
+
+const DIFFICULTIES = [
+  {id:"easy",      label:"Easy",       icon:"🟢", color:"#34D399"},
+  {id:"medium",    label:"Medium",     icon:"🟡", color:"#FBBF24"},
+  {id:"hard",      label:"Hard",       icon:"🔴", color:"#F87171"},
+  {id:"legendary", label:"Legendary",  icon:"💀", color:"#E879F9"},
+];
+
 // ─── CHARACTER ENGINE ─────────────────────────────────────────────────────────
 const AVATARS=["🧙","🧝","🧛","🧜","🦸","🧚","🔮","💀","🐉","🦅","🌙","⭐","🔥","⚡","🌊","👑","🎯","🎭","🗝","🏆"];
 const AVATAR_COLORS=["#C084FC","#F472B6","#34D399","#FBBF24","#60A5FA","#F87171","#A3E635","#E879F9","#2DD4BF","#FB923C"];
@@ -439,7 +460,7 @@ const STATUS_META={
   "On Hold":{color:"#FFD478",glow:"rgba(255,212,120,0.25)",emoji:"⏸"},
   Abandoned:{color:"#FF7878",glow:"rgba(255,120,120,0.25)",emoji:"✗"},
 };
-const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null,color_index:null};
+const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null,color_index:null,category:null,difficulty:null};
 const EMPTY_MEMBER={id:null,name:"",role:"",note:"",email:"",created_at:null};
 
 // ─── XP + RANK SYSTEM ────────────────────────────────────────────────────────
@@ -1318,6 +1339,36 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
             fontFamily:"'Cormorant Garamond',serif",
             wordBreak:"break-word",whiteSpace:"normal",overflow:"visible",
             textShadow:"0 1px 8px rgba(0,0,0,0.3)"}}>{quest.title}</h3>
+          {/* Category + Difficulty badges */}
+          {(quest.category||quest.difficulty)&&(
+            <div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
+              {quest.category&&(()=>{
+                const cat=QUEST_CATEGORIES.find(c=>c.id===quest.category);
+                return cat?(
+                  <span style={{display:"inline-flex",alignItems:"center",gap:3,
+                    padding:"2px 8px",borderRadius:20,
+                    background:"rgba(255,255,255,0.1)",
+                    fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.7)",
+                    fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.04em"}}>
+                    {cat.icon} {cat.label}
+                  </span>
+                ):null;
+              })()}
+              {quest.difficulty&&(()=>{
+                const d=DIFFICULTIES.find(d=>d.id===quest.difficulty);
+                return d?(
+                  <span style={{display:"inline-flex",alignItems:"center",gap:3,
+                    padding:"2px 8px",borderRadius:20,
+                    background:`${d.color}18`,
+                    border:`1px solid ${d.color}40`,
+                    fontSize:10,fontWeight:700,color:d.color,
+                    fontFamily:"'DM Sans',sans-serif"}}>
+                    {d.icon} {d.label}
+                  </span>
+                ):null;
+              })()}
+            </div>
+          )}
           {!expanded&&(quest.description||quest.location?.name||quest.due_date)&&(
             <p style={{margin:"3px 0 0",fontSize:12,color:"rgba(255,255,255,0.55)",whiteSpace:"nowrap",
               overflow:"hidden",textOverflow:"ellipsis",fontFamily:"'DM Sans',sans-serif"}}>
@@ -1623,6 +1674,54 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
         <div><label style={lbl}>Quest Emoji</label>
           <EmojiPicker value={form.emoji} onChange={v=>set("emoji",v)}/>
         </div>
+        {/* Category */}
+        <div>
+          <label style={lbl}>Category</label>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {QUEST_CATEGORIES.map(cat=>{
+              const active=form.category===cat.id;
+              return(
+                <button key={cat.id} type="button" onClick={()=>set("category",active?null:cat.id)} style={{
+                  display:"flex",alignItems:"center",gap:5,
+                  padding:"6px 12px",borderRadius:20,border:"none",cursor:"pointer",
+                  background:active?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",
+                  outline:active?"1px solid rgba(255,255,255,0.4)":"1px solid rgba(255,255,255,0.08)",
+                  color:active?"#fff":"rgba(255,255,255,0.4)",
+                  fontSize:12,fontWeight:600,fontFamily:"'DM Sans',sans-serif",
+                  transition:"all 0.15s",
+                }}>
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Difficulty */}
+        <div>
+          <label style={lbl}>Difficulty</label>
+          <div style={{display:"flex",gap:7}}>
+            {DIFFICULTIES.map(d=>{
+              const active=form.difficulty===d.id;
+              return(
+                <button key={d.id} type="button" onClick={()=>set("difficulty",active?null:d.id)} style={{
+                  flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,
+                  padding:"9px 8px",borderRadius:12,border:"none",cursor:"pointer",
+                  background:active?`${d.color}20`:"rgba(255,255,255,0.04)",
+                  outline:active?`1px solid ${d.color}60`:"1px solid rgba(255,255,255,0.08)",
+                  color:active?d.color:"rgba(255,255,255,0.35)",
+                  fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+                  transition:"all 0.15s",
+                }}>
+                  <span style={{fontSize:14}}>{d.icon}</span>
+                  <span>{d.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div>
           <label style={lbl}>Quest Color</label>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
