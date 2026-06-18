@@ -410,7 +410,9 @@ const QUEST_PALETTES = [
   {color:"#2DD4BF",glow:"rgba(45,212,191,0.3)", grad:"linear-gradient(135deg,#2DD4BF,#60A5FA)"},
   {color:"#FB923C",glow:"rgba(251,146,60,0.3)", grad:"linear-gradient(135deg,#FB923C,#FBBF24)"},
 ];
-const getPalette=(id)=>{
+const getPalette=(id, colorIndex)=>{
+  if(colorIndex !== undefined && colorIndex !== null && QUEST_PALETTES[colorIndex])
+    return QUEST_PALETTES[colorIndex];
   if(!id) return QUEST_PALETTES[0];
   let h=0; for(let i=0;i<id.length;i++) h=id.charCodeAt(i)+((h<<5)-h);
   return QUEST_PALETTES[Math.abs(h)%QUEST_PALETTES.length];
@@ -437,7 +439,7 @@ const STATUS_META={
   "On Hold":{color:"#FFD478",glow:"rgba(255,212,120,0.25)",emoji:"⏸"},
   Abandoned:{color:"#FF7878",glow:"rgba(255,120,120,0.25)",emoji:"✗"},
 };
-const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null};
+const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null,color_index:null};
 const EMPTY_MEMBER={id:null,name:"",role:"",note:"",email:"",created_at:null};
 
 // ─── XP + RANK SYSTEM ────────────────────────────────────────────────────────
@@ -960,7 +962,7 @@ function CompletedTab({quests,onEdit,onShare}){
   return(
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       {done.map((q,i)=>{
-        const palette=getPalette(q.id);
+        const palette=getPalette(q.id, q.color_index);
         return(
           <div key={q.id} style={{
             background:"rgba(255,255,255,0.03)",
@@ -1099,7 +1101,7 @@ function MemberDetailPage({member,quests,onBack,onEdit}){
           </p>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {myQuests.map(q=>{
-              const p=getPalette(q.id);
+              const p=getPalette(q.id, q.color_index);
               return(
                 <div key={q.id} style={{background:"rgba(255,255,255,0.03)",
                   border:`1px solid ${p.color}20`,borderLeft:`3px solid ${p.color}`,
@@ -1253,7 +1255,7 @@ function ShareQuestCard({ quest, user, onClose }) {
 function QuestCard({quest,members,onEdit,onDelete,index}){
   const [expanded,setExpanded]=useState(false);
   const [hovered,setHovered]=useState(false);
-  const palette=getPalette(quest.id);
+  const palette=getPalette(quest.id, quest.color_index);
   const {emoji}=STATUS_META[quest.status]||STATUS_META["Active"];
   const inviteeList=quest.invitees?quest.invitees.split(",").map(s=>s.trim()).filter(Boolean):[];
   const questMembers=members.filter(m=>inviteeList.map(n=>n.toLowerCase()).includes(m.name.toLowerCase()));
@@ -1620,6 +1622,32 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
         </div>
         <div><label style={lbl}>Quest Emoji</label>
           <EmojiPicker value={form.emoji} onChange={v=>set("emoji",v)}/>
+        </div>
+        <div>
+          <label style={lbl}>Quest Color</label>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {QUEST_PALETTES.map((p,i)=>{
+              const active = (form.color_index===i) || (form.color_index==null && getPalette(form.id||"x").color===p.color);
+              return(
+                <button key={i} type="button" onClick={()=>set("color_index", form.color_index===i?null:i)}
+                  style={{
+                    width:36,height:36,borderRadius:10,border:"none",cursor:"pointer",
+                    background:`linear-gradient(135deg,${p.color},${p.color}88)`,
+                    boxShadow:active?`0 0 0 3px #fff, 0 0 0 5px ${p.color}, 0 4px 12px ${p.color}60`:`0 2px 8px ${p.color}40`,
+                    transform:active?"scale(1.2)":"scale(1)",
+                    transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
+                    position:"relative",
+                  }}>
+                  {active&&<div style={{position:"absolute",inset:0,borderRadius:9,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:14,color:"#fff"}}>✓</div>}
+                </button>
+              );
+            })}
+          </div>
+          <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"6px 0 0",fontFamily:"'DM Sans',sans-serif"}}>
+            Tap a color to set it. Tap again to reset to auto.
+          </p>
         </div>
         <div><label style={lbl}>Location</label>
           <LocationSearch value={form.location} onChange={loc=>set("location",loc)}/>
@@ -4684,7 +4712,7 @@ export default function App(){
                   {quests.filter(q=>q.status==="Completed"&&q.completed_at)
                     .sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))
                     .map((q,i)=>{
-                      const p=getPalette(q.id);
+                      const p=getPalette(q.id, q.color_index);
                       return(
                         <div key={q.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:14,background:"rgba(255,255,255,0.025)",border:`1px solid ${p.color}20`,animation:`cardIn 0.4s ease ${i*0.05}s both`}}>
                           <div style={{fontSize:24}}>🔥</div>
