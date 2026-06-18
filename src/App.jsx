@@ -558,7 +558,7 @@ function MiniAvatar({name,size=32,overlap=false}){
 // ─── EMOJI PICKER ─────────────────────────────────────────────────────────────
 function EmojiPicker({value,onChange}){
   const [open,setOpen]=useState(false);
-  const [activeGroup,setActiveGroup]=useState("Adventure");
+  const [activeGroup,setActiveGroup]=useState("🔥 Hype");
   const ref=useRef(null);
   useEffect(()=>{
     const h=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
