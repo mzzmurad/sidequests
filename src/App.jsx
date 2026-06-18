@@ -3375,27 +3375,31 @@ function QuestMapPage({ quests }) {
         // Check if already has lat/lng stored
         if(q.location?.lat && q.location?.lng) {
           result[q.id] = {lat:Number(q.location.lat), lng:Number(q.location.lng)};
+          console.log("Using stored coords for:", q.title, result[q.id]);
           continue;
         }
         // Try Nominatim
         const tries = [
           q.location.name + " Azerbaijan",
+          q.location.name + " Baku",
           q.location.name,
         ];
         for(const t of tries) {
           try {
-            await new Promise(r=>setTimeout(r,500)); // respect rate limit
-            const res = await fetch(
-              `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(t)}`,
-              {headers:{"User-Agent":"SideQuests/1.0 muradquestapp.xyz"}}
-            );
+            await new Promise(r=>setTimeout(r,600));
+            const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(t)}`;
+            console.log("Geocoding:", t, url);
+            const res = await fetch(url);
             const d = await res.json();
+            console.log("Result for", t, ":", d);
             if(d&&d[0]) {
               result[q.id] = {lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)};
+              console.log("Found:", q.title, result[q.id]);
               break;
             }
-          } catch{}
+          } catch(e){ console.error("Geocode error:", e); }
         }
+        if(!result[q.id]) console.warn("Could not geocode:", q.location.name);
       }
       if(!cancelled) { setCoords(result); setLoading(false); }
     })();
