@@ -3319,157 +3319,235 @@ function QuestReactions({ questId, userId }) {
 
 // ─── QUEST MAP PAGE ───────────────────────────────────────────────────────────
 function QuestMapPage({ quests }) {
-  const [selectedQuest, setSelectedQuest] = useState(null);
-  const [filter, setFilter] = useState("All"); // All, Active, Completed
+  const [selected, setSelected] = useState(null);
+  const [filter, setFilter]     = useState("All");
+  const mapRef = useRef(null);
+  const leafletMap = useRef(null);
+  const markersRef = useRef([]);
 
-  const questsWithLocation = quests.filter(q=>q.location?.name);
-  const filtered = filter==="All" ? questsWithLocation 
-    : questsWithLocation.filter(q=>q.status===filter);
+  const questsWithLocation = quests.filter(q=>q.location?.lat&&q.location?.lng);
+  const filtered = filter==="All"?questsWithLocation:questsWithLocation.filter(q=>q.status===filter);
 
-  // Build a multi-location map query
-  const allLocations = filtered.map(q=>encodeURIComponent(q.location.name)).join("|");
-  
-  // Use the selected quest location or first quest with location
-  const focusQuest = selectedQuest || filtered[0];
-  const mapQuery = focusQuest 
-    ? encodeURIComponent(focusQuest.location.name + " Azerbaijan")
-    : "Azerbaijan";
+  // Load Leaflet dynamically
+  useEffect(()=>{
+    // Load CSS
+    if(!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+      document.head.appendChild(link);
+    }
+    // Load JS
+    const loadLeaflet = ()=>{
+      if(window.L) { initMap(); return; }
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      script.onload = initMap;
+      document.head.appendChild(script);
+    };
+    loadLeaflet();
+    return ()=>{ if(leafletMap.current) { leafletMap.current.remove(); leafletMap.current=null; } };
+  },[]);
+
+  const initMap = ()=>{
+    if(!mapRef.current||leafletMap.current) return;
+    const map = window.L.map(mapRef.current, {
+      center:[40.4093,49.8671], zoom:11,
+      zoomControl:true, scrollWheelZoom:true,
+    });
+    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+      attribution:"©OpenStreetMap ©CARTO",
+      subdomains:"abcd", maxZoom:19
+    }).addTo(map);
+    leafletMap.current = map;
+    updateMarkers(map);
+  };
+
+  const updateMarkers = (map)=>{
+    if(!map||!window.L) return;
+    // Clear old markers
+    markersRef.current.forEach(m=>m.remove());
+    markersRef.current = [];
+    const bounds = [];
+    questsWithLocation.forEach(q=>{
+      if(!q.location?.lat||!q.location?.lng) return;
+      const lat = parseFloat(q.location.lat);
+      const lng = parseFloat(q.location.lng);
+      if(isNaN(lat)||isNaN(lng)) return;
+      const statusColor = q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":q.status==="Abandoned"?"#FF7878":"#A8FF78";
+      const emoji = q.emoji||"⚔";
+      // Custom emoji marker
+      const icon = window.L.divIcon({
+        html:`<div style="
+          width:44px;height:44px;border-radius:14px;
+          background:rgba(12,12,16,0.92);
+          border:2px solid ${statusColor};
+          display:flex;align-items:center;justify-content:center;
+          font-size:22px;cursor:pointer;
+          box-shadow:0 4px 20px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.05);
+          backdrop-filter:blur(8px);
+          transition:transform 0.15s;
+        ">${emoji}</div>`,
+        className:"",
+        iconSize:[44,44],
+        iconAnchor:[22,22],
+        popupAnchor:[0,-24],
+      });
+      const marker = window.L.marker([lat,lng],{icon}).addTo(map);
+      marker.on("click",()=>{ setSelected(q); });
+      markersRef.current.push(marker);
+      bounds.push([lat,lng]);
+    });
+    if(bounds.length>0) {
+      try { map.fitBounds(bounds, {padding:[40,40], maxZoom:13}); } catch{}
+    }
+  };
+
+  // Update markers when filter changes
+  useEffect(()=>{
+    if(leafletMap.current&&window.L) {
+      markersRef.current.forEach(m=>m.remove());
+      markersRef.current=[];
+      const bounds=[];
+      filtered.forEach(q=>{
+        if(!q.location?.lat||!q.location?.lng) return;
+        const lat=parseFloat(q.location.lat);
+        const lng=parseFloat(q.location.lng);
+        if(isNaN(lat)||isNaN(lng)) return;
+        const statusColor=q.status==="Completed"?"#78C1FF":q.status==="On Hold"?"#FBBF24":"#A8FF78";
+        const emoji=q.emoji||"⚔";
+        const icon=window.L.divIcon({
+          html:`<div style="width:44px;height:44px;border-radius:14px;background:rgba(12,12,16,0.92);border:2px solid ${statusColor};display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.6);backdrop-filter:blur(8px);">${emoji}</div>`,
+          className:"",iconSize:[44,44],iconAnchor:[22,22],
+        });
+        const marker=window.L.marker([lat,lng],{icon}).addTo(leafletMap.current);
+        marker.on("click",()=>setSelected(q));
+        markersRef.current.push(marker);
+        bounds.push([lat,lng]);
+      });
+      if(bounds.length>0) {
+        try { leafletMap.current.fitBounds(bounds,{padding:[40,40],maxZoom:13}); } catch{}
+      }
+    }
+  },[filter]);
+
+  // Fly to selected quest
+  useEffect(()=>{
+    if(selected&&leafletMap.current&&selected.location?.lat) {
+      leafletMap.current.flyTo(
+        [parseFloat(selected.location.lat),parseFloat(selected.location.lng)],
+        15, {duration:1.2, easeLinearity:0.25}
+      );
+    }
+  },[selected]);
+
+  const palette = selected?getPalette(selected.id):null;
 
   return (
-    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
-      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
-        color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your World</p>
-      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
-        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
-        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:16}}>
-        Quest Map
-      </h2>
-
-      {/* Stats */}
-      <div style={{display:"flex",gap:10,marginBottom:16}}>
-        {[
-          {l:"Total",v:questsWithLocation.length,c:"#F0F0F0"},
-          {l:"Active",v:questsWithLocation.filter(q=>q.status==="Active").length,c:"#A8FF78"},
-          {l:"Completed",v:questsWithLocation.filter(q=>q.status==="Completed").length,c:"#78C1FF"},
-        ].map(({l,v,c})=>(
-          <div key={l} style={{flex:1,textAlign:"center",background:"rgba(255,255,255,0.03)",
-            border:`1px solid rgba(255,255,255,0.07)`,borderRadius:12,padding:"10px 8px"}}>
-            <div style={{fontSize:20,fontWeight:700,color:c,fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
-            <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:"0.08em",marginTop:3,
-              fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
-          </div>
-        ))}
-      </div>
-
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 140px)",overflow:"hidden"}}>
       {/* Filter pills */}
-      <div style={{display:"flex",gap:7,marginBottom:14}}>
+      <div style={{padding:"16px 20px 10px",display:"flex",gap:7,overflowX:"auto",
+        WebkitOverflowScrolling:"touch",flexShrink:0}}>
         {["All","Active","Completed","On Hold"].map(s=>{
           const active=filter===s;
           const color=s==="All"?"#F0F0F0":STATUS_META[s]?.color||"#F0F0F0";
           return(
             <button key={s} onClick={()=>setFilter(s)} style={{
-              padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:600,
-              cursor:"pointer",fontFamily:"'DM Sans',sans-serif",
+              padding:"6px 14px",borderRadius:20,fontSize:11,fontWeight:600,
+              cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
               border:`1px solid ${active?color:"rgba(255,255,255,0.09)"}`,
               background:active?`${color}15`:"transparent",
               color:active?color:"rgba(255,255,255,0.3)",
               transition:"all 0.2s",flexShrink:0,
-            }}>{s}</button>
+            }}>{s} {s==="All"?questsWithLocation.length:questsWithLocation.filter(q=>q.status===s).length}</button>
           );
         })}
       </div>
 
       {questsWithLocation.length===0?(
-        <div style={{textAlign:"center",padding:"60px 0"}}>
-          <div style={{fontSize:40,marginBottom:12,opacity:0.15}}>📍</div>
+        <div style={{textAlign:"center",padding:"80px 24px",flex:1}}>
+          <div style={{fontSize:48,marginBottom:16,opacity:0.15}}>📍</div>
           <p style={{fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
-            No quests with locations yet.<br/>Add a location to a quest to see it here.
+            No quests with locations yet.<br/>Add a location when creating a quest.
           </p>
         </div>
       ):(
-        <>
-          {/* Main map showing selected or first quest */}
-          {focusQuest&&(
-            <div style={{marginBottom:16,borderRadius:16,overflow:"hidden",
-              border:"1px solid rgba(255,255,255,0.1)",position:"relative"}}>
-              <iframe
-                title="quest-map"
-                src={`https://maps.google.com/maps?q=${mapQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
-                width="100%" height="280"
-                style={{display:"block",border:"none",
-                  filter:"invert(1) hue-rotate(190deg) saturate(0.55) brightness(0.82) contrast(1.05)"}}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-              {/* Overlay info */}
-              <div style={{position:"absolute",bottom:0,left:0,right:0,
-                background:"linear-gradient(to top,rgba(8,8,12,0.95) 0%,transparent 100%)",
-                padding:"20px 14px 12px",display:"flex",alignItems:"center",gap:8}}>
-                {focusQuest.emoji&&<span style={{fontSize:18}}>{focusQuest.emoji}</span>}
+        <div style={{flex:1,position:"relative",overflow:"hidden"}}>
+          {/* Map */}
+          <div ref={mapRef} style={{width:"100%",height:"100%"}}/>
+
+          {/* Custom map styles */}
+          <style>{`
+            .leaflet-container { background:#0A0A0C; font-family:'DM Sans',sans-serif; }
+            .leaflet-control-zoom { border:1px solid rgba(255,255,255,0.08)!important; border-radius:12px!important; overflow:hidden; }
+            .leaflet-control-zoom a { background:rgba(12,12,16,0.9)!important; color:rgba(255,255,255,0.6)!important; border-color:rgba(255,255,255,0.08)!important; width:32px!important; height:32px!important; line-height:32px!important; }
+            .leaflet-control-zoom a:hover { background:rgba(255,255,255,0.08)!important; color:#fff!important; }
+            .leaflet-control-attribution { display:none!important; }
+          `}</style>
+
+          {/* Selected quest card */}
+          {selected&&(
+            <div style={{
+              position:"absolute",bottom:16,left:16,right:16,zIndex:1000,
+              background:"linear-gradient(160deg,rgba(14,14,18,0.97),rgba(10,10,14,0.97))",
+              backdropFilter:"blur(20px)",
+              border:`1px solid ${palette.color}30`,
+              borderRadius:20,padding:"16px",
+              boxShadow:"0 8px 40px rgba(0,0,0,0.7)",
+              animation:"cardIn 0.3s ease both",
+            }}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:2,
+                background:palette.grad,borderRadius:"20px 20px 0 0"}}/>
+              <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                <div style={{width:48,height:48,borderRadius:14,flexShrink:0,
+                  background:`${palette.color}15`,border:`1.5px solid ${palette.color}30`,
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>
+                  {selected.emoji||"⚔"}
+                </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0",
-                    fontFamily:"'Cormorant Garamond',serif",
-                    whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                    {focusQuest.title}
+                  <div style={{fontSize:16,fontWeight:700,color:"#F2F2F2",
+                    fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3,wordBreak:"break-word"}}>
+                    {selected.title}
                   </div>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",marginTop:1}}>
-                    📍 {focusQuest.location.name}
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5}}>
+                    <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.08em",
+                      textTransform:"uppercase",color:STATUS_META[selected.status]?.color||"#A8FF78",
+                      background:`${STATUS_META[selected.status]?.color||"#A8FF78"}15`,
+                      border:`1px solid ${STATUS_META[selected.status]?.color||"#A8FF78"}30`,
+                      padding:"2px 7px",borderRadius:4,fontFamily:"'DM Sans',sans-serif"}}>
+                      {selected.status}
+                    </span>
+                    {selected.location?.name&&<span style={{fontSize:11,color:"rgba(255,255,255,0.35)",
+                      fontFamily:"'DM Sans',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      📍 {selected.location.name}
+                    </span>}
                   </div>
+                  {selected.description&&<div style={{fontSize:12,color:"rgba(255,255,255,0.3)",
+                    fontFamily:"'DM Sans',sans-serif",marginTop:5,lineHeight:1.5,
+                    display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+                    {selected.description}
+                  </div>}
                 </div>
-                <div style={{flexShrink:0}}>
-                  <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.08em",
-                    textTransform:"uppercase",color:STATUS_META[focusQuest.status]?.color||"#A8FF78",
-                    background:`${STATUS_META[focusQuest.status]?.color||"#A8FF78"}15`,
-                    border:`1px solid ${STATUS_META[focusQuest.status]?.color||"#A8FF78"}30`,
-                    padding:"2px 7px",borderRadius:4,fontFamily:"'DM Sans',sans-serif"}}>
-                    {focusQuest.status}
-                  </span>
-                </div>
+                <button onClick={()=>setSelected(null)} style={{
+                  background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+                  borderRadius:8,padding:"5px 6px",cursor:"pointer",color:"rgba(255,255,255,0.4)",
+                  flexShrink:0}}>
+                  <Icon d={Icons.x} size={14}/>
+                </button>
               </div>
             </div>
           )}
 
-          {/* Quest location list */}
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
-            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
-            {filtered.length} location{filtered.length!==1?"s":""}
-          </p>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {filtered.map((q,i)=>{
-              const palette=getPalette(q.id);
-              const isSelected=selectedQuest?.id===q.id;
-              return(
-                <button key={q.id} onClick={()=>setSelectedQuest(isSelected?null:q)}
-                  style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
-                    borderRadius:14,cursor:"pointer",textAlign:"left",
-                    background:isSelected?`${palette.color}12`:"rgba(255,255,255,0.025)",
-                    border:`1px solid ${isSelected?palette.color+"40":"rgba(255,255,255,0.06)"}`,
-                    transition:"all 0.15s",animation:`cardIn 0.4s ease ${i*0.04}s both`}}>
-                  <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
-                    background:`${palette.color}15`,border:`1px solid ${palette.color}25`,
-                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
-                    {q.emoji||"📍"}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
-                      fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3,
-                      wordBreak:"break-word"}}>{q.title}</div>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",
-                      fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
-                      📍 {q.location.name}
-                    </div>
-                  </div>
-                  <div style={{flexShrink:0}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",
-                      background:STATUS_META[q.status]?.color||"#A8FF78",
-                      boxShadow:`0 0 6px ${STATUS_META[q.status]?.color||"#A8FF78"}`,
-                      animation:q.status==="Active"?"pulseDot 2s ease-in-out infinite":"none"}}/>
-                  </div>
-                </button>
-              );
-            })}
+          {/* Quest count badge */}
+          <div style={{position:"absolute",top:12,right:12,zIndex:999,
+            background:"rgba(10,10,14,0.85)",backdropFilter:"blur(8px)",
+            border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
+            padding:"5px 10px",fontSize:11,fontWeight:600,
+            color:"rgba(255,255,255,0.5)",fontFamily:"'DM Sans',sans-serif"}}>
+            {filtered.length} quest{filtered.length!==1?"s":""}
           </div>
-        </>
+        </div>
       )}
     </div>
   );
