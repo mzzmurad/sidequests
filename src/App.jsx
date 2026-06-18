@@ -580,20 +580,18 @@ function EmojiPicker({value,onChange}){
         {value&&<button onClick={e=>{e.stopPropagation();onChange("");}} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:13}}>✕</button>}
       </button>
       {open&&createPortal(
-        <div style={{position:"fixed",inset:0,zIndex:9998}} onClick={()=>setOpen(false)}>
+        <div style={{position:"fixed",inset:0,zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={()=>setOpen(false)}>
           <div style={{
-            position:"fixed",
-            top: ref.current ? ref.current.getBoundingClientRect().bottom + 8 : 200,
-            left: ref.current ? ref.current.getBoundingClientRect().left : 20,
-            right: ref.current ? window.innerWidth - ref.current.getBoundingClientRect().right : 20,
+            width:"100%",maxWidth:420,
             zIndex:9999,
             background:"#0E0E12",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,
-            overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.8)",
-            animation:"cardIn 0.2s ease both",maxHeight:"50vh",display:"flex",flexDirection:"column",
+            overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.9)",
+            animation:"cardIn 0.2s ease both",maxHeight:"70vh",display:"flex",flexDirection:"column",
           }} onClick={e=>e.stopPropagation()}>
             {/* Category tabs */}
             <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid rgba(255,255,255,0.07)",
-              padding:"8px 8px 0",gap:3,flexShrink:0}}>
+              padding:"8px 8px 0",gap:3,flexShrink:0,WebkitOverflowScrolling:"touch"}}>
               {Object.keys(EMOJI_GROUPS).map(g=>(
                 <button key={g} onClick={()=>setActiveGroup(g)} style={{
                   flexShrink:0,padding:"5px 10px",borderRadius:"8px 8px 0 0",
@@ -606,12 +604,12 @@ function EmojiPicker({value,onChange}){
               ))}
             </div>
             {/* Emoji grid */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(10,1fr)",gap:2,padding:10,overflowY:"auto"}}>
-              {EMOJI_GROUPS[activeGroup].map((em,i)=>(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:4,padding:12,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+              {(EMOJI_GROUPS[activeGroup]||[]).map((em,i)=>(
                 <button key={i} onClick={()=>{onChange(em);setOpen(false);}} style={{
-                  fontSize:22,padding:"7px",borderRadius:8,border:"none",
+                  fontSize:24,padding:"8px",borderRadius:10,border:"none",
                   background:value===em?"rgba(255,255,255,0.12)":"transparent",
-                  cursor:"pointer",transition:"all 0.1s",lineHeight:1,
+                  cursor:"pointer",transition:"all 0.1s",lineHeight:1,aspectRatio:"1",
                   boxShadow:value===em?"inset 0 0 0 1px rgba(255,255,255,0.2)":"none",
                 }}
                   onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}
