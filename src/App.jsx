@@ -1262,20 +1262,34 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
 
   return(
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
-      style={{position:"relative",overflow:"hidden",
-        background:expanded?"rgba(255,255,255,0.055)":hovered?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.025)",
-        borderRadius:20,
-        border:`1px solid ${expanded?palette.color+"35":hovered?palette.color+"25":"rgba(255,255,255,0.07)"}`,
-        transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)",
-        transform:hovered&&!expanded?"translateY(-2px)":"translateY(0)",
-        boxShadow:expanded?`0 16px 48px rgba(0,0,0,0.45),0 0 0 1px ${palette.color}15,inset 0 0 60px ${palette.color}04`
-          :hovered?`0 8px 24px rgba(0,0,0,0.3),0 0 0 1px ${palette.color}10`:"none",
+      style={{position:"relative",
         animation:`cardIn 0.5s cubic-bezier(0.34,1.2,0.64,1) ${index*0.07}s both`,
+        transition:"transform 0.3s cubic-bezier(0.34,1.2,0.64,1)",
+        transform:hovered&&!expanded?"translateY(-3px)":"translateY(0)",
+      }}>
+      {/* Glow behind card */}
+      <div style={{
+        position:"absolute",inset:0,borderRadius:20,
+        background:`radial-gradient(ellipse at 50% 50%, ${palette.color}22 0%, transparent 70%)`,
+        filter:`blur(${expanded?16:hovered?12:8}px)`,
+        transform:"scale(1.05)",
+        opacity:expanded?1:hovered?0.8:0.5,
+        transition:"all 0.4s ease",
+        pointerEvents:"none",zIndex:0,
+      }}/>
+      <div style={{position:"relative",zIndex:1,overflow:"hidden",
+        background:expanded?`linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))`
+          :hovered?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.025)",
+        borderRadius:20,
+        border:`1px solid ${expanded?palette.color+"50":hovered?palette.color+"30":"rgba(255,255,255,0.08)"}`,
+        boxShadow:expanded?`0 0 0 1px ${palette.color}20, inset 0 1px 0 rgba(255,255,255,0.08)`
+          :hovered?`0 0 0 1px ${palette.color}15`:"none",
+        transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)",
       }}>
       <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:palette.grad,
-        opacity:expanded?0.9:hovered?0.6:0.3,transition:"opacity 0.3s"}}/>
-      <div style={{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",
-        background:`radial-gradient(circle,${palette.color}12 0%,transparent 70%)`,pointerEvents:"none"}}/>
+        opacity:expanded?1:hovered?0.7:0.4,transition:"opacity 0.3s"}}/>
+      <div style={{position:"absolute",top:-20,right:-20,width:140,height:140,borderRadius:"50%",
+        background:`radial-gradient(circle,${palette.color}15 0%,transparent 70%)`,pointerEvents:"none"}}/>
 
       {quest.emoji?(
         <div style={{position:"absolute",right:16,top:"50%",
@@ -1437,6 +1451,7 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
