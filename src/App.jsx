@@ -646,23 +646,23 @@ function LocationSearch({value,onChange}){
     // Try to geocode immediately so lat/lng are saved with the quest
     try {
       const searches = [
-        query.trim() + ", Azerbaijan",
-        query.trim() + ", Baku",
+        query.trim() + " Azerbaijan",
+        query.trim() + " Baku",
         query.trim(),
       ];
       let found = false;
       for(const s of searches) {
-        const r = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(s)}&format=json&limit=1`,
-          {headers:{"User-Agent":"SideQuestsApp/1.0"}}
-        );
-        const d = await r.json();
-        if(d[0]) {
-          onChange({name:query.trim(), lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)});
-          found = true;
-          break;
-        }
-        await new Promise(res=>setTimeout(res,150));
+        try {
+          const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(s)}&limit=1`);
+          const d = await r.json();
+          if(d&&d.features&&d.features[0]) {
+            const [lng,lat] = d.features[0].geometry.coordinates;
+            onChange({name:query.trim(), lat, lng});
+            found = true;
+            break;
+          }
+        } catch{}
+        await new Promise(res=>setTimeout(res,200));
       }
       if(!found) onChange({name:query.trim()});
     } catch {
@@ -3375,10 +3375,9 @@ function QuestMapPage({ quests }) {
         // Check if already has lat/lng stored
         if(q.location?.lat && q.location?.lng) {
           result[q.id] = {lat:Number(q.location.lat), lng:Number(q.location.lng)};
-          console.log("Using stored coords for:", q.title, result[q.id]);
           continue;
         }
-        // Try Nominatim
+        // Use Photon API (CORS-friendly, free, no key needed)
         const tries = [
           q.location.name + " Azerbaijan",
           q.location.name + " Baku",
@@ -3386,20 +3385,31 @@ function QuestMapPage({ quests }) {
         ];
         for(const t of tries) {
           try {
-            await new Promise(r=>setTimeout(r,600));
-            const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(t)}`;
-            console.log("Geocoding:", t, url);
-            const res = await fetch(url);
+            await new Promise(r=>setTimeout(r,300));
+            const res = await fetch(
+              `https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&limit=1&bbox=44.7,38.4,50.9,41.9`
+            );
             const d = await res.json();
-            console.log("Result for", t, ":", d);
-            if(d&&d[0]) {
-              result[q.id] = {lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)};
-              console.log("Found:", q.title, result[q.id]);
+            if(d&&d.features&&d.features[0]) {
+              const [lng,lat] = d.features[0].geometry.coordinates;
+              result[q.id] = {lat, lng};
               break;
             }
-          } catch(e){ console.error("Geocode error:", e); }
+          } catch(e){}
+          // Also try without bbox for places outside Azerbaijan
+          try {
+            await new Promise(r=>setTimeout(r,300));
+            const res = await fetch(
+              `https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&limit=1`
+            );
+            const d = await res.json();
+            if(d&&d.features&&d.features[0]) {
+              const [lng,lat] = d.features[0].geometry.coordinates;
+              result[q.id] = {lat, lng};
+              break;
+            }
+          } catch(e){}
         }
-        if(!result[q.id]) console.warn("Could not geocode:", q.location.name);
       }
       if(!cancelled) { setCoords(result); setLoading(false); }
     })();
