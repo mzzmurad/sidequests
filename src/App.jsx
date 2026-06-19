@@ -2566,6 +2566,13 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
         </span>
       </div>
 
+      {/* ── BOTTOM NAV ─────────────────────────────────────────────────────── */}
+      <BottomNav
+        tabs={TABS}
+        activeTab={tab}
+        onSelect={(id)=>{setTab(id);setMemberDetail(null);}}
+      />
+
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
     </div>
@@ -3997,6 +4004,173 @@ Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation
   );
 }
 
+
+// ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
+const MAIN_TABS = ["quests","completed","boards","profile"];
+
+function BottomNav({ tabs, activeTab, onSelect }) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startY = useRef(0);
+
+  const mainTabs = tabs.filter(t=>MAIN_TABS.includes(t.id));
+  const extraTabs = tabs.filter(t=>!MAIN_TABS.includes(t.id));
+
+  const handleTouchStart=(e)=>{
+    startY.current=e.touches[0].clientY;
+    setDragging(true);
+  };
+  const handleTouchMove=(e)=>{
+    const dy=e.touches[0].clientY-startY.current;
+    if(dy<0&&!drawerOpen) setDragY(Math.max(dy,-300));
+    if(dy>0&&drawerOpen) setDragY(Math.min(dy,300));
+  };
+  const handleTouchEnd=()=>{
+    setDragging(false);
+    if(!drawerOpen&&dragY<-60) setDrawerOpen(true);
+    else if(drawerOpen&&dragY>60) setDrawerOpen(false);
+    setDragY(0);
+  };
+
+  const NavBtn=({t,large=false})=>{
+    const active=activeTab===t.id;
+    return(
+      <button onClick={()=>{onSelect(t.id);setDrawerOpen(false);}} style={{
+        display:"flex",flexDirection:"column",alignItems:"center",gap:4,
+        flex:large?0:1,padding:large?"10px 20px":"8px 0",
+        background:"none",border:"none",cursor:"pointer",
+        color:active?"#FFFFFF":"rgba(255,255,255,0.35)",
+        transition:"all 0.2s",position:"relative",minWidth:large?60:0,
+      }}>
+        <div style={{
+          position:"relative",
+          width:large?52:44,height:large?52:44,borderRadius:large?16:14,
+          background:active
+            ?large?"linear-gradient(135deg,#A8FF78,#78C1FF)":"rgba(255,255,255,0.12)"
+            :"rgba(255,255,255,0.05)",
+          border:active&&!large?"1px solid rgba(255,255,255,0.2)":"1px solid transparent",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          transition:"all 0.25s cubic-bezier(0.34,1.2,0.64,1)",
+          transform:active?"scale(1.08)":"scale(1)",
+          boxShadow:active&&large?"0 4px 20px rgba(168,255,120,0.4)":active?"0 2px 12px rgba(255,255,255,0.1)":"none",
+        }}>
+          <Icon d={t.icon} size={large?22:18} stroke={active&&large?"#0A0A0C":"currentColor"}/>
+          {t.count>0&&(
+            <div style={{position:"absolute",top:-2,right:-2,
+              minWidth:16,height:16,borderRadius:8,
+              background:"#F472B6",
+              fontSize:9,fontWeight:700,color:"#fff",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              padding:"0 4px",fontFamily:"'DM Sans',sans-serif",
+              border:"2px solid #08080A"}}>
+              {t.count>9?"9+":t.count}
+            </div>
+          )}
+        </div>
+        <span style={{fontSize:10,fontWeight:active?700:500,
+          letterSpacing:"0.02em",fontFamily:"'DM Sans',sans-serif",
+          color:active?"#fff":"rgba(255,255,255,0.3)",
+          transition:"all 0.2s"}}>
+          {t.label}
+        </span>
+      </button>
+    );
+  };
+
+  return(
+    <>
+      {/* Drawer backdrop */}
+      {drawerOpen&&(
+        <div style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)"}}
+          onClick={()=>setDrawerOpen(false)}/>
+      )}
+
+      {/* Extra tabs drawer */}
+      {extraTabs.length>0&&(
+        <div style={{
+          position:"fixed",bottom:drawerOpen?90:-200,left:0,right:0,zIndex:201,
+          background:"linear-gradient(160deg,rgba(16,16,20,0.97),rgba(10,10,14,0.97))",
+          backdropFilter:"blur(20px)",
+          borderTop:"1px solid rgba(255,255,255,0.08)",
+          borderRadius:"24px 24px 0 0",
+          padding:"16px 16px 8px",
+          transition:dragging?"none":"bottom 0.4s cubic-bezier(0.34,1.1,0.64,1)",
+          transform:drawerOpen&&dragY>0?`translateY(${dragY}px)`:!drawerOpen&&dragY<0?`translateY(${dragY}px)`:"none",
+        }}>
+          {/* Handle */}
+          <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.15)",
+            margin:"0 auto 16px"}}/>
+          <div style={{display:"flex",justifyContent:"space-around",flexWrap:"wrap",gap:8}}>
+            {extraTabs.map(t=>(
+              <div key={t.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:70}}>
+                <button onClick={()=>{onSelect(t.id);setDrawerOpen(false);}} style={{
+                  width:52,height:52,borderRadius:16,border:"none",cursor:"pointer",
+                  background:activeTab===t.id?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",
+                  outline:activeTab===t.id?"1px solid rgba(255,255,255,0.25)":"none",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  color:activeTab===t.id?"#fff":"rgba(255,255,255,0.4)",
+                  transition:"all 0.2s",position:"relative",
+                }}>
+                  <Icon d={t.icon} size={20} stroke="currentColor"/>
+                  {t.count>0&&(
+                    <div style={{position:"absolute",top:-2,right:-2,minWidth:16,height:16,
+                      borderRadius:8,background:"#F472B6",fontSize:9,fontWeight:700,color:"#fff",
+                      display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",
+                      fontFamily:"'DM Sans',sans-serif",border:"2px solid #08080A"}}>
+                      {t.count>9?"9+":t.count}
+                    </div>
+                  )}
+                </button>
+                <span style={{fontSize:10,fontWeight:500,color:activeTab===t.id?"#fff":"rgba(255,255,255,0.3)",
+                  fontFamily:"'DM Sans',sans-serif",textAlign:"center"}}>{t.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Main bottom nav */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          position:"fixed",bottom:0,left:0,right:0,zIndex:202,
+          background:"linear-gradient(160deg,rgba(12,12,16,0.97),rgba(8,8,12,0.97))",
+          backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",
+          borderTop:"1px solid rgba(255,255,255,0.06)",
+          paddingBottom:"env(safe-area-inset-bottom,0px)",
+        }}>
+        {/* Swipe up handle - shows when extra tabs exist */}
+        {extraTabs.length>0&&(
+          <div onClick={()=>setDrawerOpen(o=>!o)} style={{
+            display:"flex",alignItems:"center",justifyContent:"center",
+            padding:"6px 0 2px",cursor:"pointer",gap:6,
+          }}>
+            <div style={{width:36,height:3,borderRadius:2,
+              background:drawerOpen?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.12)",
+              transition:"all 0.3s"}}/>
+            <span style={{fontSize:9,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
+              letterSpacing:"0.1em",textTransform:"uppercase"}}>
+              {drawerOpen?"close":"more"}
+            </span>
+            <div style={{width:36,height:3,borderRadius:2,
+              background:drawerOpen?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.12)",
+              transition:"all 0.3s"}}/>
+          </div>
+        )}
+        <div style={{display:"flex",alignItems:"center",padding:"4px 8px 8px"}}>
+          {mainTabs.map((t,i)=><NavBtn key={t.id} t={t} large={false}/>)}
+        </div>
+      </div>
+
+      {/* Bottom padding so content doesn't hide behind nav */}
+      <div style={{height:90}}/>
+    </>
+  );
+}
+
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
@@ -4531,19 +4705,8 @@ export default function App(){
               <RankBadge xp={userXP} size="sm"/>
             </div>
           </div>
-          <div style={{display:"flex",gap:0,borderBottom:"1px solid rgba(255,255,255,0.06)",overflowX:"auto"}}>
-            {TABS.map(t=>(
-              <button key={t.id} onClick={()=>{setTab(t.id);setMemberDetail(null);}} style={{
-                display:"flex",alignItems:"center",gap:6,flexShrink:0,padding:"10px 14px 12px",
-                background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?"rgba(255,255,255,0.6)":"transparent"}`,
-                color:tab===t.id?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.3)",
-                cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",marginBottom:-1,
-              }}>
-                <Icon d={t.icon} size={13} stroke="currentColor"/>{t.label}
-                {t.count>0&&<span style={{fontSize:10,opacity:0.5,marginLeft:1}}>{t.count}</span>}
-              </button>
-            ))}
-          </div>
+          {/* Spacer for bottom nav */}
+          <div style={{height:0}}/>
           {tab==="quests"&&(
             <div style={{paddingTop:14,paddingBottom:2}}>
               {/* Personal / Shared scope toggle */}
@@ -4873,6 +5036,13 @@ export default function App(){
           Made by <span style={{color:"rgba(255,255,255,0.2)",fontWeight:600}}>Murad Mirzayev</span>
         </span>
       </div>
+
+      {/* ── BOTTOM NAV ─────────────────────────────────────────────────────── */}
+      <BottomNav
+        tabs={TABS}
+        activeTab={tab}
+        onSelect={(id)=>{setTab(id);setMemberDetail(null);}}
+      />
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {shareQuest&&<ShareQuestCard quest={shareQuest} user={user} onClose={()=>setShareQuest(null)}/>}
