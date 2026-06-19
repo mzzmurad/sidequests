@@ -2567,12 +2567,6 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
       </div>
 
       {/* ── BOTTOM NAV ─────────────────────────────────────────────────────── */}
-      <BottomNav
-        tabs={TABS}
-        activeTab={tab}
-        onSelect={(id)=>{setTab(id);setMemberDetail(null);}}
-      />
-
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {deleteTarget&&<DeleteConfirm label="quest" onConfirm={deleteQuest} onCancel={()=>setDeleteTarget(null)}/>}
     </div>
