@@ -4010,70 +4010,69 @@ const MAIN_TABS = ["quests","completed","boards","profile"];
 
 function BottomNav({ tabs, activeTab, onSelect }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
   const startY = useRef(0);
+  const isDragging = useRef(false);
 
   const mainTabs = tabs.filter(t=>MAIN_TABS.includes(t.id));
   const extraTabs = tabs.filter(t=>!MAIN_TABS.includes(t.id));
 
   const handleTouchStart=(e)=>{
     startY.current=e.touches[0].clientY;
-    setDragging(true);
+    isDragging.current=false;
   };
   const handleTouchMove=(e)=>{
-    const dy=e.touches[0].clientY-startY.current;
-    if(dy<0&&!drawerOpen) setDragY(Math.max(dy,-300));
-    if(dy>0&&drawerOpen) setDragY(Math.min(dy,300));
+    const dy=startY.current-e.touches[0].clientY;
+    if(Math.abs(dy)>10) isDragging.current=true;
   };
-  const handleTouchEnd=()=>{
-    setDragging(false);
-    if(!drawerOpen&&dragY<-60) setDrawerOpen(true);
-    else if(drawerOpen&&dragY>60) setDrawerOpen(false);
-    setDragY(0);
+  const handleTouchEnd=(e)=>{
+    if(isDragging.current) {
+      const dy=startY.current-e.changedTouches[0].clientY;
+      if(dy>40&&!drawerOpen) setDrawerOpen(true);
+      if(dy<-40&&drawerOpen) setDrawerOpen(false);
+    }
+    isDragging.current=false;
   };
 
-  const NavBtn=({t,large=false})=>{
+  const NavBtn=({t})=>{
     const active=activeTab===t.id;
     return(
-      <button onClick={()=>{onSelect(t.id);setDrawerOpen(false);}} style={{
-        display:"flex",flexDirection:"column",alignItems:"center",gap:4,
-        flex:large?0:1,padding:large?"10px 20px":"8px 0",
-        background:"none",border:"none",cursor:"pointer",
-        color:active?"#FFFFFF":"rgba(255,255,255,0.35)",
-        transition:"all 0.2s",position:"relative",minWidth:large?60:0,
-      }}>
+      <button
+        onClick={(e)=>{e.stopPropagation();onSelect(t.id);}}
+        style={{
+          display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+          flex:1,padding:"6px 0 4px",
+          background:"none",border:"none",cursor:"pointer",
+          WebkitTapHighlightColor:"transparent",
+          position:"relative",
+        }}>
         <div style={{
           position:"relative",
-          width:large?52:44,height:large?52:44,borderRadius:large?16:14,
-          background:active
-            ?large?"linear-gradient(135deg,#A8FF78,#78C1FF)":"rgba(255,255,255,0.12)"
-            :"rgba(255,255,255,0.05)",
-          border:active&&!large?"1px solid rgba(255,255,255,0.2)":"1px solid transparent",
+          width:46,height:46,borderRadius:15,
+          background:active?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.04)",
+          border:`1px solid ${active?"rgba(255,255,255,0.22)":"rgba(255,255,255,0.06)"}`,
           display:"flex",alignItems:"center",justifyContent:"center",
-          transition:"all 0.25s cubic-bezier(0.34,1.2,0.64,1)",
-          transform:active?"scale(1.08)":"scale(1)",
-          boxShadow:active&&large?"0 4px 20px rgba(168,255,120,0.4)":active?"0 2px 12px rgba(255,255,255,0.1)":"none",
+          transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
+          transform:active?"scale(1.06)":"scale(1)",
+          boxShadow:active?"0 0 16px rgba(255,255,255,0.08)":"none",
         }}>
-          <Icon d={t.icon} size={large?22:18} stroke={active&&large?"#0A0A0C":"currentColor"}/>
+          <Icon d={t.icon} size={19} stroke={active?"#fff":"rgba(255,255,255,0.4)"}/>
           {t.count>0&&(
-            <div style={{position:"absolute",top:-2,right:-2,
-              minWidth:16,height:16,borderRadius:8,
-              background:"#F472B6",
+            <div style={{
+              position:"absolute",top:-3,right:-3,
+              minWidth:17,height:17,borderRadius:9,
+              background:"#F472B6",border:"2px solid #08080A",
               fontSize:9,fontWeight:700,color:"#fff",
               display:"flex",alignItems:"center",justifyContent:"center",
-              padding:"0 4px",fontFamily:"'DM Sans',sans-serif",
-              border:"2px solid #08080A"}}>
-              {t.count>9?"9+":t.count}
-            </div>
+              padding:"0 3px",fontFamily:"'DM Sans',sans-serif",
+            }}>{t.count>9?"9+":t.count}</div>
           )}
         </div>
-        <span style={{fontSize:10,fontWeight:active?700:500,
-          letterSpacing:"0.02em",fontFamily:"'DM Sans',sans-serif",
+        <span style={{
+          fontSize:10,fontWeight:active?700:500,
+          fontFamily:"'DM Sans',sans-serif",
           color:active?"#fff":"rgba(255,255,255,0.3)",
-          transition:"all 0.2s"}}>
-          {t.label}
-        </span>
+          transition:"color 0.2s",
+        }}>{t.label}</span>
       </button>
     );
   };
@@ -4082,91 +4081,95 @@ function BottomNav({ tabs, activeTab, onSelect }) {
     <>
       {/* Drawer backdrop */}
       {drawerOpen&&(
-        <div style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(8px)"}}
-          onClick={()=>setDrawerOpen(false)}/>
+        <div
+          onClick={()=>setDrawerOpen(false)}
+          style={{position:"fixed",inset:0,zIndex:299,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(6px)"}}/>
       )}
 
-      {/* Extra tabs drawer */}
-      {extraTabs.length>0&&(
-        <div style={{
-          position:"fixed",bottom:drawerOpen?90:-200,left:0,right:0,zIndex:201,
-          background:"linear-gradient(160deg,rgba(16,16,20,0.97),rgba(10,10,14,0.97))",
-          backdropFilter:"blur(20px)",
-          borderTop:"1px solid rgba(255,255,255,0.08)",
-          borderRadius:"24px 24px 0 0",
-          padding:"16px 16px 8px",
-          transition:dragging?"none":"bottom 0.4s cubic-bezier(0.34,1.1,0.64,1)",
-          transform:drawerOpen&&dragY>0?`translateY(${dragY}px)`:!drawerOpen&&dragY<0?`translateY(${dragY}px)`:"none",
-        }}>
-          {/* Handle */}
-          <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.15)",
-            margin:"0 auto 16px"}}/>
-          <div style={{display:"flex",justifyContent:"space-around",flexWrap:"wrap",gap:8}}>
-            {extraTabs.map(t=>(
-              <div key={t.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:70}}>
-                <button onClick={()=>{onSelect(t.id);setDrawerOpen(false);}} style={{
-                  width:52,height:52,borderRadius:16,border:"none",cursor:"pointer",
-                  background:activeTab===t.id?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",
-                  outline:activeTab===t.id?"1px solid rgba(255,255,255,0.25)":"none",
+      {/* Extra tabs drawer — slides up from behind main nav */}
+      <div style={{
+        position:"fixed",
+        bottom: drawerOpen ? 82 : -160,
+        left:0,right:0,zIndex:300,
+        background:"linear-gradient(160deg,rgba(16,16,20,0.98),rgba(10,10,14,0.98))",
+        backdropFilter:"blur(20px)",
+        border:"1px solid rgba(255,255,255,0.08)",
+        borderBottom:"none",
+        borderRadius:"24px 24px 0 0",
+        padding:"14px 20px 16px",
+        transition:"bottom 0.35s cubic-bezier(0.34,1.1,0.64,1)",
+      }}>
+        <div style={{width:40,height:3,borderRadius:2,background:"rgba(255,255,255,0.15)",margin:"0 auto 14px"}}/>
+        <div style={{display:"flex",justifyContent:"space-around"}}>
+          {extraTabs.map(t=>{
+            const active=activeTab===t.id;
+            return(
+              <button key={t.id}
+                onClick={(e)=>{e.stopPropagation();onSelect(t.id);setDrawerOpen(false);}}
+                style={{
+                  display:"flex",flexDirection:"column",alignItems:"center",gap:5,
+                  background:"none",border:"none",cursor:"pointer",
+                  WebkitTapHighlightColor:"transparent",padding:"4px 8px",
+                }}>
+                <div style={{
+                  width:52,height:52,borderRadius:16,border:"none",
+                  background:active?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.06)",
+                  outline:active?"1px solid rgba(255,255,255,0.25)":"none",
                   display:"flex",alignItems:"center",justifyContent:"center",
-                  color:activeTab===t.id?"#fff":"rgba(255,255,255,0.4)",
+                  color:active?"#fff":"rgba(255,255,255,0.4)",
                   transition:"all 0.2s",position:"relative",
                 }}>
-                  <Icon d={t.icon} size={20} stroke="currentColor"/>
+                  <Icon d={t.icon} size={21} stroke="currentColor"/>
                   {t.count>0&&(
-                    <div style={{position:"absolute",top:-2,right:-2,minWidth:16,height:16,
-                      borderRadius:8,background:"#F472B6",fontSize:9,fontWeight:700,color:"#fff",
-                      display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",
+                    <div style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,
+                      borderRadius:9,background:"#F472B6",fontSize:9,fontWeight:700,color:"#fff",
+                      display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",
                       fontFamily:"'DM Sans',sans-serif",border:"2px solid #08080A"}}>
                       {t.count>9?"9+":t.count}
                     </div>
                   )}
-                </button>
-                <span style={{fontSize:10,fontWeight:500,color:activeTab===t.id?"#fff":"rgba(255,255,255,0.3)",
-                  fontFamily:"'DM Sans',sans-serif",textAlign:"center"}}>{t.label}</span>
-              </div>
-            ))}
-          </div>
+                </div>
+                <span style={{fontSize:10,color:active?"#fff":"rgba(255,255,255,0.35)",
+                  fontFamily:"'DM Sans',sans-serif",fontWeight:active?700:500}}>{t.label}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
+      </div>
 
-      {/* Main bottom nav */}
+      {/* Main bottom nav — always fixed, never moves */}
       <div
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         style={{
-          position:"fixed",bottom:0,left:0,right:0,zIndex:202,
-          background:"linear-gradient(160deg,rgba(12,12,16,0.97),rgba(8,8,12,0.97))",
-          backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",
-          borderTop:"1px solid rgba(255,255,255,0.06)",
-          paddingBottom:"env(safe-area-inset-bottom,0px)",
+          position:"fixed",bottom:0,left:0,right:0,zIndex:301,
+          background:"rgba(8,8,12,0.97)",
+          backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",
+          borderTop:"1px solid rgba(255,255,255,0.07)",
+          paddingBottom:"max(env(safe-area-inset-bottom,0px),8px)",
         }}>
-        {/* Swipe up handle - shows when extra tabs exist */}
-        {extraTabs.length>0&&(
-          <div onClick={()=>setDrawerOpen(o=>!o)} style={{
-            display:"flex",alignItems:"center",justifyContent:"center",
-            padding:"6px 0 2px",cursor:"pointer",gap:6,
-          }}>
-            <div style={{width:36,height:3,borderRadius:2,
-              background:drawerOpen?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.12)",
-              transition:"all 0.3s"}}/>
-            <span style={{fontSize:9,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
-              letterSpacing:"0.1em",textTransform:"uppercase"}}>
-              {drawerOpen?"close":"more"}
-            </span>
-            <div style={{width:36,height:3,borderRadius:2,
-              background:drawerOpen?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.12)",
-              transition:"all 0.3s"}}/>
-          </div>
-        )}
-        <div style={{display:"flex",alignItems:"center",padding:"4px 8px 8px"}}>
-          {mainTabs.map((t,i)=><NavBtn key={t.id} t={t} large={false}/>)}
+        {/* More handle */}
+        <div onClick={()=>setDrawerOpen(o=>!o)} style={{
+          display:"flex",alignItems:"center",justifyContent:"center",
+          padding:"5px 0 0",cursor:"pointer",gap:8,
+        }}>
+          <div style={{width:28,height:2.5,borderRadius:2,
+            background:drawerOpen?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",transition:"all 0.3s"}}/>
+          <span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
+            letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:600}}>
+            {drawerOpen?"CLOSE":"MORE"}
+          </span>
+          <div style={{width:28,height:2.5,borderRadius:2,
+            background:drawerOpen?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",transition:"all 0.3s"}}/>
+        </div>
+        <div style={{display:"flex",alignItems:"center",padding:"2px 12px 4px"}}>
+          {mainTabs.map(t=><NavBtn key={t.id} t={t}/>)}
         </div>
       </div>
 
-      {/* Bottom padding so content doesn't hide behind nav */}
-      <div style={{height:90}}/>
+      {/* Spacer */}
+      <div style={{height:88,flexShrink:0}}/>
     </>
   );
 }
