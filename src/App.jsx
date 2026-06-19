@@ -1328,16 +1328,17 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
 
       {/* Collapsed row */}
       <div onClick={()=>hasDetails&&setExpanded(e=>!e)}
-        style={{padding:"16px 18px",display:"flex",alignItems:"center",gap:12,
-          cursor:hasDetails?"pointer":"default",userSelect:"none"}}>
+        style={{padding:"16px 18px",display:"flex",alignItems:"center",gap:10,
+          cursor:hasDetails?"pointer":"default",userSelect:"none",minWidth:0}}>
         <div style={{width:9,height:9,borderRadius:"50%",flexShrink:0,background:palette.color,
           boxShadow:`0 0 10px ${palette.color}`,
           animation:quest.status==="Active"?"pulseDot 2s ease-in-out infinite":"none"}}/>
-        <div style={{flex:1,minWidth:0}}>
+        <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
           <h3 style={{margin:0,fontSize:17,fontWeight:700,letterSpacing:"-0.02em",
             color:"#FFFFFF",lineHeight:1.3,
             fontFamily:"'Cormorant Garamond',serif",
-            wordBreak:"break-word",whiteSpace:"normal",overflow:"visible",
+            wordBreak:"break-word",overflowWrap:"break-word",
+            whiteSpace:"normal",minWidth:0,
             textShadow:"0 1px 8px rgba(0,0,0,0.3)"}}>{quest.title}</h3>
           {/* Category + Difficulty badges */}
           {(quest.category||quest.difficulty)&&(
@@ -1398,14 +1399,7 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
             )}
           </div>
         )}
-        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-          {isShared&&(
-            <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",
-              color:"rgba(120,193,255,0.8)",background:"rgba(120,193,255,0.1)",
-              border:"1px solid rgba(120,193,255,0.2)",padding:"2px 6px",borderRadius:4,flexShrink:0}}>
-              Shared
-            </span>
-          )}
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           <StatusBadge status={quest.status}/>
           {hasDetails&&(
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:24,height:24,
