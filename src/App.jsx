@@ -2551,14 +2551,7 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
         <Icon d={Icons.plus} size={16} stroke="#0A0A0C"/> Add Quest
       </button>
 
-      {/* Made by footer */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:5,
-        pointerEvents:"none",display:"flex",justifyContent:"center",paddingBottom:8}}>
-        <span style={{fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:"'DM Sans',sans-serif",
-          letterSpacing:"0.06em"}}>
-          Made by <span style={{color:"rgba(255,255,255,0.2)",fontWeight:600}}>Murad Mirzayev</span>
-        </span>
-      </div>
+
 
       {/* ── BOTTOM NAV ─────────────────────────────────────────────────────── */}
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
@@ -4991,10 +4984,11 @@ export default function App(){
       {/* ✨ Idea generator button */}
       {tab==="quests"&&!activeBoard&&(
         <button onClick={()=>setShowIdeas(true)} style={{
-          position:"fixed",bottom:96,right:20,zIndex:101,
-          width:46,height:46,borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",
+          position:"fixed",bottom:104,right:20,zIndex:400,
+          width:46,height:46,borderRadius:14,
+          border:"1px solid rgba(255,255,255,0.1)",
           cursor:"pointer",
-          background:"rgba(20,20,24,0.9)",
+          background:"rgba(14,14,18,0.92)",
           backdropFilter:"blur(12px)",
           boxShadow:"0 4px 20px rgba(0,0,0,0.5)",
           display:"flex",alignItems:"center",justifyContent:"center",
@@ -5011,22 +5005,25 @@ export default function App(){
           else if(tab==="party") setMemberModal({...EMPTY_MEMBER});
           else if(tab==="boards") setShowCreateBoard(true);
         }}
-          style={{position:"fixed",bottom:36,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#e8e8e8,#ffffff)",color:"#0A0A0C",border:"none",borderRadius:28,padding:"14px 28px",display:"flex",alignItems:"center",gap:9,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",letterSpacing:"-0.01em",animation:"fabPulse 3s ease-in-out infinite",transition:"transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",zIndex:100}}
-          onMouseEnter={e=>{e.currentTarget.style.transform="translateX(-50%) scale(1.06)";e.currentTarget.style.animation="none";}}
-          onMouseLeave={e=>{e.currentTarget.style.transform="translateX(-50%) scale(1)";e.currentTarget.style.animation="fabPulse 3s ease-in-out infinite";}}>
-          <Icon d={Icons.plus} size={16} stroke="#0A0A0C"/>
-          {tab==="quests"?"New Quest":tab==="boards"?"New Board":"Add Member"}
+          style={{
+            position:"fixed",bottom:104,
+            left: tab==="quests" ? "calc(50% - 28px)" : "50%",
+            transform: tab==="quests" ? "none" : "translateX(-50%)",
+            width:56,height:56,
+            background:"linear-gradient(135deg,#e8e8e8,#ffffff)",
+            color:"#0A0A0C",border:"none",borderRadius:"50%",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            cursor:"pointer",zIndex:400,
+            boxShadow:"0 4px 24px rgba(255,255,255,0.25), 0 2px 8px rgba(0,0,0,0.4)",
+            transition:"transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+          }}
+          onMouseEnter={e=>e.currentTarget.style.transform=tab==="quests"?"scale(1.1)":"translateX(-50%) scale(1.1)"}
+          onMouseLeave={e=>e.currentTarget.style.transform=tab==="quests"?"scale(1)":"translateX(-50%) scale(1)"}>
+          <Icon d={Icons.plus} size={22} stroke="#0A0A0C"/>
         </button>
       )}
 
-      {/* Made by footer */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:5,
-        pointerEvents:"none",display:"flex",justifyContent:"center",paddingBottom:8}}>
-        <span style={{fontSize:10,color:"rgba(255,255,255,0.12)",fontFamily:"'DM Sans',sans-serif",
-          letterSpacing:"0.06em"}}>
-          Made by <span style={{color:"rgba(255,255,255,0.2)",fontWeight:600}}>Murad Mirzayev</span>
-        </span>
-      </div>
+
 
       {/* ── BOTTOM NAV ─────────────────────────────────────────────────────── */}
       <BottomNav
