@@ -3989,14 +3989,11 @@ Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation
 // ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
 function BottomNav({ tabs, activeTab, onSelect, onAdd, onIdeas, showAdd }) {
   // All tabs in one scrollable row, + button in center
-  const leftTabs  = ["quests","boards","friends"];
+  const leftTabs  = ["quests","boards","friends","completed"];
   const rightTabs = ["memories","map","calendar","profile"];
 
   const left  = tabs.filter(t=>leftTabs.includes(t.id));
-  const right = tabs.filter(t=>rightTabs.includes(t.id));
-  const extra = tabs.filter(t=>![...leftTabs,...rightTabs].includes(t.id));
-  // Merge extra into right
-  const rightAll = [...right, ...extra];
+  const rightAll = tabs.filter(t=>rightTabs.includes(t.id));
 
   const NavBtn = ({t}) => {
     const active = activeTab===t.id;
