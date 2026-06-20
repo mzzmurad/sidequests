@@ -3987,173 +3987,128 @@ Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation
 
 
 // ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
-const MAIN_TABS = ["quests","completed","boards","profile"];
+function BottomNav({ tabs, activeTab, onSelect, onAdd, onIdeas, showAdd }) {
+  // All tabs in one scrollable row, + button in center
+  const leftTabs  = ["quests","boards","friends"];
+  const rightTabs = ["memories","map","calendar","profile"];
 
-function BottomNav({ tabs, activeTab, onSelect }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const startY = useRef(0);
-  const isDragging = useRef(false);
+  const left  = tabs.filter(t=>leftTabs.includes(t.id));
+  const right = tabs.filter(t=>rightTabs.includes(t.id));
+  const extra = tabs.filter(t=>![...leftTabs,...rightTabs].includes(t.id));
+  // Merge extra into right
+  const rightAll = [...right, ...extra];
 
-  const mainTabs = tabs.filter(t=>MAIN_TABS.includes(t.id));
-  const extraTabs = tabs.filter(t=>!MAIN_TABS.includes(t.id));
-
-  const handleTouchStart=(e)=>{
-    startY.current=e.touches[0].clientY;
-    isDragging.current=false;
-  };
-  const handleTouchMove=(e)=>{
-    const dy=startY.current-e.touches[0].clientY;
-    if(Math.abs(dy)>10) isDragging.current=true;
-  };
-  const handleTouchEnd=(e)=>{
-    if(isDragging.current) {
-      const dy=startY.current-e.changedTouches[0].clientY;
-      if(dy>40&&!drawerOpen) setDrawerOpen(true);
-      if(dy<-40&&drawerOpen) setDrawerOpen(false);
-    }
-    isDragging.current=false;
-  };
-
-  const NavBtn=({t})=>{
-    const active=activeTab===t.id;
-    return(
+  const NavBtn = ({t}) => {
+    const active = activeTab===t.id;
+    return (
       <button
-        onClick={(e)=>{e.stopPropagation();onSelect(t.id);}}
+        onClick={()=>onSelect(t.id)}
         style={{
           display:"flex",flexDirection:"column",alignItems:"center",gap:3,
-          flex:1,padding:"6px 0 4px",
+          flex:1,padding:"8px 4px 4px",minWidth:0,
           background:"none",border:"none",cursor:"pointer",
           WebkitTapHighlightColor:"transparent",
-          position:"relative",
+          transition:"opacity 0.15s",
         }}>
         <div style={{
           position:"relative",
-          width:46,height:46,borderRadius:15,
-          background:active?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.04)",
-          border:`1px solid ${active?"rgba(255,255,255,0.22)":"rgba(255,255,255,0.06)"}`,
+          width:42,height:42,borderRadius:13,
+          background:active?"rgba(255,255,255,0.13)":"transparent",
+          border:`1px solid ${active?"rgba(255,255,255,0.18)":"transparent"}`,
           display:"flex",alignItems:"center",justifyContent:"center",
           transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
-          transform:active?"scale(1.06)":"scale(1)",
-          boxShadow:active?"0 0 16px rgba(255,255,255,0.08)":"none",
+          transform:active?"scale(1.05)":"scale(1)",
         }}>
-          <Icon d={t.icon} size={19} stroke={active?"#fff":"rgba(255,255,255,0.4)"}/>
+          <Icon d={t.icon} size={18} stroke={active?"#fff":"rgba(255,255,255,0.38)"}/>
           {t.count>0&&(
             <div style={{
               position:"absolute",top:-3,right:-3,
-              minWidth:17,height:17,borderRadius:9,
+              minWidth:16,height:16,borderRadius:8,
               background:"#F472B6",border:"2px solid #08080A",
-              fontSize:9,fontWeight:700,color:"#fff",
+              fontSize:8,fontWeight:700,color:"#fff",
               display:"flex",alignItems:"center",justifyContent:"center",
               padding:"0 3px",fontFamily:"'DM Sans',sans-serif",
             }}>{t.count>9?"9+":t.count}</div>
           )}
         </div>
         <span style={{
-          fontSize:10,fontWeight:active?700:500,
+          fontSize:9,fontWeight:active?700:500,
           fontFamily:"'DM Sans',sans-serif",
           color:active?"#fff":"rgba(255,255,255,0.3)",
-          transition:"color 0.2s",
+          transition:"color 0.2s",letterSpacing:"0.01em",
+          whiteSpace:"nowrap",overflow:"hidden",
+          maxWidth:"100%",textOverflow:"ellipsis",
         }}>{t.label}</span>
       </button>
     );
   };
 
-  return(
+  return (
     <>
-      {/* Drawer backdrop */}
-      {drawerOpen&&(
-        <div
-          onClick={()=>setDrawerOpen(false)}
-          style={{position:"fixed",inset:0,zIndex:299,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(6px)"}}/>
-      )}
-
-      {/* Extra tabs drawer — slides up from behind main nav */}
       <div style={{
-        position:"fixed",
-        bottom: drawerOpen ? 82 : -160,
-        left:0,right:0,zIndex:300,
-        background:"linear-gradient(160deg,rgba(16,16,20,0.98),rgba(10,10,14,0.98))",
-        backdropFilter:"blur(20px)",
-        border:"1px solid rgba(255,255,255,0.08)",
-        borderBottom:"none",
-        borderRadius:"24px 24px 0 0",
-        padding:"14px 20px 16px",
-        transition:"bottom 0.35s cubic-bezier(0.34,1.1,0.64,1)",
+        position:"fixed",bottom:0,left:0,right:0,zIndex:500,
+        background:"rgba(8,8,12,0.96)",
+        backdropFilter:"blur(28px)",WebkitBackdropFilter:"blur(28px)",
+        borderTop:"1px solid rgba(255,255,255,0.07)",
+        paddingBottom:"max(env(safe-area-inset-bottom,0px),6px)",
       }}>
-        <div style={{width:40,height:3,borderRadius:2,background:"rgba(255,255,255,0.15)",margin:"0 auto 14px"}}/>
-        <div style={{display:"flex",justifyContent:"space-around"}}>
-          {extraTabs.map(t=>{
-            const active=activeTab===t.id;
-            return(
-              <button key={t.id}
-                onClick={(e)=>{e.stopPropagation();onSelect(t.id);setDrawerOpen(false);}}
-                style={{
-                  display:"flex",flexDirection:"column",alignItems:"center",gap:5,
-                  background:"none",border:"none",cursor:"pointer",
-                  WebkitTapHighlightColor:"transparent",padding:"4px 8px",
-                }}>
-                <div style={{
-                  width:52,height:52,borderRadius:16,border:"none",
-                  background:active?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.06)",
-                  outline:active?"1px solid rgba(255,255,255,0.25)":"none",
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  color:active?"#fff":"rgba(255,255,255,0.4)",
-                  transition:"all 0.2s",position:"relative",
-                }}>
-                  <Icon d={t.icon} size={21} stroke="currentColor"/>
-                  {t.count>0&&(
-                    <div style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,
-                      borderRadius:9,background:"#F472B6",fontSize:9,fontWeight:700,color:"#fff",
-                      display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",
-                      fontFamily:"'DM Sans',sans-serif",border:"2px solid #08080A"}}>
-                      {t.count>9?"9+":t.count}
-                    </div>
-                  )}
-                </div>
-                <span style={{fontSize:10,color:active?"#fff":"rgba(255,255,255,0.35)",
-                  fontFamily:"'DM Sans',sans-serif",fontWeight:active?700:500}}>{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+        <div style={{display:"flex",alignItems:"center",padding:"4px 6px 2px",gap:0}}>
+          {/* Left tabs */}
+          {left.map(t=><NavBtn key={t.id} t={t}/>)}
 
-      {/* Main bottom nav — always fixed, never moves */}
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{
-          position:"fixed",bottom:0,left:0,right:0,zIndex:301,
-          background:"rgba(8,8,12,0.97)",
-          backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",
-          borderTop:"1px solid rgba(255,255,255,0.07)",
-          paddingBottom:"max(env(safe-area-inset-bottom,0px),8px)",
-        }}>
-        {/* More handle */}
-        <div onClick={()=>setDrawerOpen(o=>!o)} style={{
-          display:"flex",alignItems:"center",justifyContent:"center",
-          padding:"5px 0 0",cursor:"pointer",gap:8,
-        }}>
-          <div style={{width:28,height:2.5,borderRadius:2,
-            background:drawerOpen?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",transition:"all 0.3s"}}/>
-          <span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
-            letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:600}}>
-            {drawerOpen?"CLOSE":"MORE"}
-          </span>
-          <div style={{width:28,height:2.5,borderRadius:2,
-            background:drawerOpen?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",transition:"all 0.3s"}}/>
-        </div>
-        <div style={{display:"flex",alignItems:"center",padding:"2px 12px 4px"}}>
-          {mainTabs.map(t=><NavBtn key={t.id} t={t}/>)}
-        </div>
-      </div>
+          {/* Center + button */}
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+            flex:1,padding:"4px 4px 4px",minWidth:0}}>
+            <button
+              onClick={showAdd?onAdd:()=>{}}
+              style={{
+                width:50,height:50,borderRadius:16,border:"none",cursor:"pointer",
+                background:showAdd?"linear-gradient(135deg,#f0f0f0,#ffffff)":"rgba(255,255,255,0.06)",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                boxShadow:showAdd?"0 4px 20px rgba(255,255,255,0.2), 0 2px 8px rgba(0,0,0,0.4)":"none",
+                transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
+                transform:"scale(1)",
+                WebkitTapHighlightColor:"transparent",
+              }}
+              onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+              <Icon d={Icons.plus} size={22} stroke={showAdd?"#0A0A0C":"rgba(255,255,255,0.2)"}/>
+            </button>
+            {showAdd&&(
+              <span style={{fontSize:9,color:"rgba(255,255,255,0.3)",
+                fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>New</span>
+            )}
+          </div>
 
+          {/* Right tabs */}
+          {rightAll.map(t=><NavBtn key={t.id} t={t}/>)}
+        </div>
+
+        {/* ✨ Ideas button - floats above nav on quests tab */}
+        {showAdd&&(
+          <button onClick={onIdeas} style={{
+            position:"absolute",right:14,top:-52,
+            width:42,height:42,borderRadius:13,
+            border:"1px solid rgba(255,255,255,0.1)",
+            cursor:"pointer",
+            background:"rgba(10,10,14,0.92)",
+            backdropFilter:"blur(12px)",
+            boxShadow:"0 4px 16px rgba(0,0,0,0.5)",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:20,zIndex:1,
+            transition:"transform 0.2s"}}
+            onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"}
+            onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+            ✨
+          </button>
+        )}
+      </div>
       {/* Spacer */}
-      <div style={{height:88,flexShrink:0}}/>
+      <div style={{height:80,flexShrink:0}}/>
     </>
   );
 }
+
 
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
@@ -4981,47 +4936,7 @@ export default function App(){
         )}
       </main>
 
-      {/* ✨ Idea generator button */}
-      {tab==="quests"&&!activeBoard&&(
-        <button onClick={()=>setShowIdeas(true)} style={{
-          position:"fixed",bottom:104,right:20,zIndex:400,
-          width:46,height:46,borderRadius:14,
-          border:"1px solid rgba(255,255,255,0.1)",
-          cursor:"pointer",
-          background:"rgba(14,14,18,0.92)",
-          backdropFilter:"blur(12px)",
-          boxShadow:"0 4px 20px rgba(0,0,0,0.5)",
-          display:"flex",alignItems:"center",justifyContent:"center",
-          fontSize:22,transition:"transform 0.2s"}}
-          onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"}
-          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-          ✨
-        </button>
-      )}
 
-      {(tab==="quests"||tab==="party"||tab==="boards")&&!activeBoard&&(
-        <button onClick={()=>{
-          if(tab==="quests") setQuestModal({...EMPTY_QUEST});
-          else if(tab==="party") setMemberModal({...EMPTY_MEMBER});
-          else if(tab==="boards") setShowCreateBoard(true);
-        }}
-          style={{
-            position:"fixed",bottom:104,
-            left: tab==="quests" ? "calc(50% - 28px)" : "50%",
-            transform: tab==="quests" ? "none" : "translateX(-50%)",
-            width:56,height:56,
-            background:"linear-gradient(135deg,#e8e8e8,#ffffff)",
-            color:"#0A0A0C",border:"none",borderRadius:"50%",
-            display:"flex",alignItems:"center",justifyContent:"center",
-            cursor:"pointer",zIndex:400,
-            boxShadow:"0 4px 24px rgba(255,255,255,0.25), 0 2px 8px rgba(0,0,0,0.4)",
-            transition:"transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",
-          }}
-          onMouseEnter={e=>e.currentTarget.style.transform=tab==="quests"?"scale(1.1)":"translateX(-50%) scale(1.1)"}
-          onMouseLeave={e=>e.currentTarget.style.transform=tab==="quests"?"scale(1)":"translateX(-50%) scale(1)"}>
-          <Icon d={Icons.plus} size={22} stroke="#0A0A0C"/>
-        </button>
-      )}
 
 
 
@@ -5029,7 +4944,13 @@ export default function App(){
       <BottomNav
         tabs={TABS}
         activeTab={tab}
-        onSelect={(id)=>{setTab(id);setMemberDetail(null);}}
+        onSelect={(id)=>{setTab(id);setMemberDetail(null);setActiveBoard(null);}}
+        onAdd={()=>{
+          if(tab==="quests") setQuestModal({...EMPTY_QUEST});
+          else if(tab==="boards") setShowCreateBoard(true);
+        }}
+        onIdeas={()=>setShowIdeas(true)}
+        showAdd={["quests","boards"].includes(tab)&&!activeBoard}
       />
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
