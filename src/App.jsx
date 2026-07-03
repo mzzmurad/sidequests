@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://fbldconclzuckyotxvsk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZibGRjb25jbHp1Y2t5b3R4dnNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MDUwMDcsImV4cCI6MjA5NjQ4MTAwN30.dFPSoQLShrnrhGdAt4K3TPZWLigtUAe4ZaI7XygCMO0";
+const TMDB_KEY = "2f3454a6e973630c47e785e664612aeb"; // used client-side per TMDB's own ToS for personal apps
 
 // ─── SUPABASE AUTH + API ───────────────────────────────────────────────────────
 const sb = {
@@ -3330,6 +3331,9 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
   useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
   const close=()=>{ setVisible(false); setTimeout(onClose,250); };
 
+  // TMDB (themoviedb.org) — the actual database Letterboxd itself runs on.
+  // One call covers movies + TV together and is far more complete/reliable than
+  // iTunes' catalog, which is only what's sellable/rentable in the store.
   const search = async(q)=>{
     const trimmed = q.trim();
     latestQuery.current = trimmed;
@@ -3337,34 +3341,40 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
     setSearching(true);
     setSearchError(false);
     try {
-      const [mRes,tRes] = await Promise.all([
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(trimmed)}&media=movie&country=US&limit=20`).then(r=>r.json()),
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(trimmed)}&media=tvShow&entity=tvSeason&country=US&limit=12`).then(r=>r.json()),
-      ]);
+      const res = await fetch(
+        `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(trimmed)}&include_adult=false&language=en-US`
+      );
+      if(!res.ok) throw new Error(`TMDB responded ${res.status}`);
+      const data = await res.json();
 
       // A newer keystroke already kicked off a fresher search — throw this stale
       // response away instead of letting it clobber what's currently on screen.
       if(latestQuery.current !== trimmed) return;
 
-      const movies = (mRes.results||[]).map(r=>({
-        title:r.trackName, year:(r.releaseDate||"").slice(0,4),
-        poster:(r.artworkUrl100||"").replace("100x100bb","600x600bb").replace("100x100","500x500"),
-        type:"movie",
-      }));
-      const shows = (tRes.results||[]).map(r=>({
-        title:r.collectionName||r.trackName, year:(r.releaseDate||"").slice(0,4),
-        poster:(r.artworkUrl100||"").replace("100x100bb","600x600bb").replace("100x100","500x500"),
-        type:"tv",
-      }));
+      let items = (data.results||[])
+        .filter(r=>r.media_type==="movie"||r.media_type==="tv")
+        .map(r=>{
+          const isMovie = r.media_type==="movie";
+          const title = isMovie ? r.title : r.name;
+          const date  = isMovie ? r.release_date : r.first_air_date;
+          return {
+            title,
+            year: (date||"").slice(0,4),
+            poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
+            type: isMovie ? "movie" : "tv",
+            popularity: r.popularity||0,
+          };
+        })
+        .filter(r=>r.title);
 
       // De-dupe by title+year
       const seen = new Set();
-      let merged = [...movies,...shows].filter(r=>{
-        if(!r.title) return false;
+      items = items.filter(r=>{
         const k=(r.title+r.year).toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true;
       });
 
-      // Relevance sort: exact match, then starts-with, then contains, then everything else.
+      // Relevance sort: exact/starts-with/contains tier first, popularity breaks ties —
+      // this is what puts Dune (2021) above obscure same-word results.
       const qLower = trimmed.toLowerCase();
       const score = (t)=>{
         const s = t.toLowerCase();
@@ -3373,9 +3383,9 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
         if(s.includes(qLower)) return 2;
         return 3;
       };
-      merged.sort((a,b)=>score(a.title)-score(b.title));
+      items.sort((a,b)=> score(a.title)-score(b.title) || b.popularity-a.popularity);
 
-      setResults(merged.slice(0,16));
+      setResults(items.slice(0,16));
     } catch(e) {
       console.error("Movie search failed:", e);
       if(latestQuery.current === trimmed) { setResults([]); setSearchError(true); }
