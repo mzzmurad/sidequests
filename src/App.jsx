@@ -546,7 +546,7 @@ function ActionBtn({onClick,children,danger,title}){
       borderRadius:9,padding:"6px 8px",
       color:h?(danger?"#FF7878":"#fff"):"rgba(255,255,255,0.4)",
       cursor:"pointer",display:"flex",alignItems:"center",
-      transition:"all 0.15s",transform:h?"scale(1.08)":"scale(1)",
+      transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",transform:h?"scale(1.08)":"scale(1)",
     }} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}>{children}</button>
   );
 }
@@ -572,7 +572,7 @@ function MiniAvatar({name,size=32,overlap=false}){
       border:`2px solid ${color}60`,display:"flex",alignItems:"center",justifyContent:"center",
       fontSize:size*0.42,boxShadow:`0 0 10px ${color}30`,
       marginLeft:overlap?-size*0.3:0,position:"relative",zIndex:1,
-      transition:"transform 0.2s",cursor:"default",
+      transition:"transform 0.2s cubic-bezier(0.34,1.2,0.64,1)",cursor:"default",
     }}
       onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.15)";e.currentTarget.style.zIndex="10";}}
       onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.zIndex="1";}}
@@ -593,7 +593,7 @@ function EmojiPicker({value,onChange}){
         display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderRadius:12,
         cursor:"pointer",background:open?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.04)",
         border:`1px solid ${open?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.09)"}`,
-        transition:"all 0.2s",width:"100%",
+        transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",width:"100%",
       }}>
         <span style={{fontSize:22,lineHeight:1}}>{value||"✨"}</span>
         <span style={{fontSize:13,color:value?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.3)",
@@ -640,7 +640,7 @@ function EmojiPicker({value,onChange}){
                   border:"none",borderBottom:activeGroup===g?"2px solid rgba(255,255,255,0.6)":"2px solid transparent",
                   color:activeGroup===g?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",
                   cursor:"pointer",fontSize:11,fontWeight:600,
-                  fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",transition:"all 0.15s",
+                  fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",
                 }}>{g}</button>
               ))}
             </div>
@@ -944,7 +944,7 @@ function StreakCalendar({quests}){
               borderRadius:8,position:"relative",
               background:fire?"rgba(251,191,36,0.12)":start?"rgba(168,255,120,0.08)":tod?"rgba(255,255,255,0.06)":"transparent",
               border:fire?"1px solid rgba(251,191,36,0.25)":start?"1px solid rgba(168,255,120,0.2)":tod?"1px solid rgba(255,255,255,0.2)":"1px solid transparent",
-              transition:"all 0.15s",
+              transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",
             }}>
               {fire?(
                 <span style={{fontSize:16,lineHeight:1,filter:"drop-shadow(0 0 6px rgba(251,191,36,0.8))"}}>🔥</span>
@@ -1322,7 +1322,7 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
       {quest.emoji?(
         <div style={{position:"absolute",right:16,top:"50%",
           transform:expanded?"translateY(-50%) scale(1.1)":"translateY(-50%) scale(1)",
-          fontSize:28,opacity:expanded?0.55:hovered?0.4:0.25,userSelect:"none",transition:"all 0.3s"}}>{quest.emoji}</div>
+          fontSize:28,opacity:expanded?0.55:hovered?0.4:0.25,userSelect:"none",transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)"}}>{quest.emoji}</div>
       ):(
         <div style={{position:"absolute",right:16,bottom:12,fontSize:36,
           opacity:expanded?0.07:0.035,userSelect:"none",filter:"blur(1px)"}}>{emoji}</div>
@@ -1684,7 +1684,7 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
                   outline:active?"1px solid rgba(255,255,255,0.4)":"1px solid rgba(255,255,255,0.08)",
                   color:active?"#fff":"rgba(255,255,255,0.4)",
                   fontSize:12,fontWeight:600,fontFamily:"'DM Sans',sans-serif",
-                  transition:"all 0.15s",
+                  transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",
                 }}>
                   <span>{cat.icon}</span>
                   <span>{cat.label}</span>
@@ -1708,7 +1708,7 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
                   outline:active?`1px solid ${d.color}60`:"1px solid rgba(255,255,255,0.08)",
                   color:active?d.color:"rgba(255,255,255,0.35)",
                   fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
-                  transition:"all 0.15s",
+                  transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",
                 }}>
                   <span style={{fontSize:14}}>{d.icon}</span>
                   <span>{d.label}</span>
@@ -1774,7 +1774,7 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
                       borderRadius:12,cursor:"pointer",textAlign:"left",
                       background:invited?`${color}12`:"rgba(255,255,255,0.03)",
                       border:`1px solid ${invited?color+"40":"rgba(255,255,255,0.07)"}`,
-                      transition:"all 0.15s"}}>
+                      transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}>
                     <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
                       background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
                       border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
@@ -1992,7 +1992,7 @@ function DeleteConfirm({onConfirm,onCancel,label="quest"}){
   return(
     <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.7:0})`,
       backdropFilter:`blur(${visible?12:0}px)`,display:"flex",alignItems:"center",
-      justifyContent:"center",zIndex:3000,padding:24,transition:"all 0.2s"}}
+      justifyContent:"center",zIndex:3000,padding:24,transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}
       onClick={e=>e.target===e.currentTarget&&close(onCancel)}>
       <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
         border:"1px solid rgba(255,255,255,0.09)",borderRadius:22,padding:"28px 24px",maxWidth:320,width:"100%",
@@ -2227,7 +2227,7 @@ function InviteModal({ board, user, friends=[], onClose }) {
                       background:isSent?"rgba(168,255,120,0.12)":"rgba(255,255,255,0.1)",
                       color:isSent?"#A8FF78":"rgba(255,255,255,0.7)",
                       fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
-                      flexShrink:0,transition:"all 0.2s",opacity:isSending?0.5:1}}>
+                      flexShrink:0,transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",opacity:isSending?0.5:1}}>
                       {isSending?"…":isSent?"Sent!":"Invite"}
                     </button>
                   </div>
@@ -2263,7 +2263,7 @@ function InviteModal({ board, user, friends=[], onClose }) {
           color:copied?"#A8FF78":"rgba(255,255,255,0.6)",
           border:copied?"1px solid rgba(168,255,120,0.3)":"1px solid rgba(255,255,255,0.1)",
           borderRadius:14,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",
-          fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",
+          fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
           display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
           <Icon d={Icons.copy} size={15} stroke="currentColor"/>
           {copied?"Copied!":"Copy Invite Link"}
@@ -3173,7 +3173,7 @@ function MemoriesPage({ user }) {
                 justifyContent:"center",borderRadius:10,border:"none",cursor:fut?"default":"pointer",
                 background: mem?"rgba(192,132,252,0.15)":tod?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)",
                 outline: tod?"1px solid rgba(255,255,255,0.25)":mem?"1px solid rgba(192,132,252,0.4)":"1px solid transparent",
-                transition:"all 0.15s",opacity:fut?0.3:1,
+                transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",opacity:fut?0.3:1,
                 position:"relative",
               }}
                 onMouseEnter={e=>{ if(!fut) e.currentTarget.style.background=mem?"rgba(192,132,252,0.25)":"rgba(255,255,255,0.08)"; }}
@@ -3222,7 +3222,7 @@ function MemoriesPage({ user }) {
                 style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
                   borderRadius:14,background:"rgba(255,255,255,0.025)",
                   border:"1px solid rgba(192,132,252,0.2)",cursor:"pointer",textAlign:"left",
-                  transition:"all 0.15s"}}
+                  transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}
                 onMouseEnter={e=>e.currentTarget.style.background="rgba(192,132,252,0.08)"}
                 onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.025)"}
               >
@@ -3537,7 +3537,7 @@ function QuestReactions({ questId, userId }) {
           padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",
           background:mine?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.04)",
           outline:mine?"1px solid rgba(255,255,255,0.2)":"none",
-          transition:"all 0.15s",
+          transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",
         }}
           onMouseEnter={e=>e.currentTarget.style.background=mine?"rgba(255,255,255,0.16)":"rgba(255,255,255,0.08)"}
           onMouseLeave={e=>e.currentTarget.style.background=mine?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.04)"}
@@ -3701,7 +3701,7 @@ function QuestMapPage({ quests }) {
               whiteSpace:"nowrap",fontFamily:"'DM Sans',sans-serif",flexShrink:0,
               border:`1px solid ${on?col:"rgba(255,255,255,0.09)"}`,
               background:on?`${col}15`:"transparent",
-              color:on?col:"rgba(255,255,255,0.3)",transition:"all 0.2s",
+              color:on?col:"rgba(255,255,255,0.3)",transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
             }}>{s} {cnt}</button>
           );
         })}
@@ -3935,7 +3935,7 @@ Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation
                   padding:"14px 14px",borderRadius:16,
                   background:isAdded?`${color}08`:"rgba(255,255,255,0.03)",
                   border:`1px solid ${isAdded?color+"30":"rgba(255,255,255,0.07)"}`,
-                  transition:"all 0.2s",
+                  transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
                   animation:`cardIn 0.4s ease ${i*0.06}s both`}}>
                   <div style={{width:42,height:42,borderRadius:12,flexShrink:0,
                     background:`${color}12`,border:`1px solid ${color}25`,
@@ -3956,7 +3956,7 @@ Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation
                     background:isAdded?`${color}20`:"rgba(255,255,255,0.08)",
                     color:isAdded?color:"rgba(255,255,255,0.5)",
                     display:"flex",alignItems:"center",justifyContent:"center",
-                    flexShrink:0,fontSize:18,fontWeight:700,transition:"all 0.2s"}}>
+                    flexShrink:0,fontSize:18,fontWeight:700,transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}>
                     {isAdded?"✓":"+"}
                   </button>
                 </div>
@@ -3974,7 +3974,7 @@ Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation
             color:"rgba(255,255,255,0.9)",fontSize:14,fontWeight:700,
             fontFamily:"'DM Sans',sans-serif",flexShrink:0,
             display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-            transition:"all 0.2s"}}
+            transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}
             onMouseEnter={e=>e.currentTarget.style.background="linear-gradient(135deg,rgba(168,255,120,0.2),rgba(120,193,255,0.2))"}
             onMouseLeave={e=>e.currentTarget.style.background="linear-gradient(135deg,rgba(168,255,120,0.12),rgba(120,193,255,0.12))"}>
             ✨ Generate 8 New Ideas
@@ -4247,7 +4247,7 @@ function AuthScreen({ onAuth }) {
                 background:mode===m?"rgba(255,255,255,0.1)":"transparent",
                 color:mode===m?"#F0F0F0":"rgba(255,255,255,0.35)",
                 fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif",
-                transition:"all 0.2s",
+                transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
               }}>{m==="signin"?"Sign In":"Sign Up"}</button>
             ))}
           </div>
@@ -4294,7 +4294,7 @@ function AuthScreen({ onAuth }) {
             border:"none",borderRadius:14,padding:"15px",
             fontSize:15,fontWeight:700,cursor:"pointer",
             fontFamily:"'DM Sans',sans-serif",
-            transition:"all 0.2s",opacity:loading?0.7:1,
+            transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",opacity:loading?0.7:1,
           }}>
             {loading ? "…" : mode==="signin" ? "Sign In" : "Create Account"}
           </button>
@@ -4350,6 +4350,14 @@ export default function App(){
   const [showIdeas,setShowIdeas]         = useState(false);
   const [mounted,setMounted]     = useState(false);
   const [syncing,setSyncing]     = useState(false);
+
+  // Enables the CSS :active pseudo-class on tap for iOS Safari (otherwise it
+  // never fires on touch, so button press feedback would silently do nothing).
+  useEffect(()=>{
+    const noop=()=>{};
+    document.addEventListener("touchstart", noop, {passive:true});
+    return ()=>document.removeEventListener("touchstart", noop);
+  },[]);
 
   // ── Boot: check existing session + invite code ────────────────────────────
   useEffect(()=>{
@@ -4615,14 +4623,31 @@ export default function App(){
         .app-shell{height:100vh;height:100dvh;}
         ::placeholder{color:rgba(255,255,255,0.18)!important;}
         ::-webkit-scrollbar{width:0;}
+
+        /* ── Global spring easing + tap feedback, applied app-wide ── */
+        :root{--spring:cubic-bezier(0.34,1.2,0.64,1);}
+        button{-webkit-tap-highlight-color:transparent;transition:transform 0.15s var(--spring);}
+        button:active{transform:scale(0.97);}
+
         @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(1.3);}}
         @keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+        @keyframes pageIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
         @keyframes spin{to{transform:rotate(360deg);}}
         @keyframes orb1{0%,100%{transform:translate(0,0);}50%{transform:translate(40px,-30px);}}
         @keyframes orb2{0%,100%{transform:translate(0,0);}50%{transform:translate(-30px,40px);}}
         @keyframes fabPulse{0%,100%{box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 0 rgba(240,240,240,0.08);}50%{box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 10px rgba(240,240,240,0);}}
         @keyframes sheetIn{from{transform:translateY(100%);}to{transform:translateY(0);}}
+        @keyframes grainShift{0%,100%{transform:translate(0,0);}10%{transform:translate(-1%,-2%);}20%{transform:translate(-3%,1%);}30%{transform:translate(2%,-3%);}40%{transform:translate(-2%,3%);}50%{transform:translate(3%,1%);}60%{transform:translate(-1%,2%);}70%{transform:translate(2%,2%);}80%{transform:translate(-3%,-1%);}90%{transform:translate(1%,-2%);}}
       `}</style>
+
+      {/* Film-grain texture overlay — subtle depth, no visual noise/clutter */}
+      <div style={{
+        position:"absolute",inset:"-10%",pointerEvents:"none",zIndex:2,
+        opacity:0.035,mixBlendMode:"overlay",
+        backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27120%27 height=%27120%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.85%27 numOctaves=%272%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27/%3E%3C/svg%3E\")",
+        backgroundRepeat:"repeat",
+        animation:"grainShift 1.2s steps(1) infinite",
+      }}/>
 
       <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:0,overflow:"hidden"}}>
         <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(168,255,120,0.05) 0%,transparent 70%)",top:-100,left:-100,animation:"orb1 12s ease-in-out infinite"}}/>
@@ -4645,7 +4670,7 @@ export default function App(){
               <button onClick={()=>setTab("profile")} style={{
                 display:"flex",alignItems:"center",gap:6,
                 background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
-                borderRadius:8,padding:"4px 10px 4px 6px",cursor:"pointer",transition:"all 0.15s",
+                borderRadius:8,padding:"4px 10px 4px 6px",cursor:"pointer",transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",
               }}
                 onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}
                 onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.04)"}
@@ -4684,7 +4709,7 @@ export default function App(){
                     background:questScope===s.id?"rgba(255,255,255,0.1)":"transparent",
                     color:questScope===s.id?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.3)",
                     fontSize:12, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
-                    transition:"all 0.2s", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                    transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
                   }}>
                     {s.label}
                     <span style={{fontSize:10,opacity:0.5,background:"rgba(255,255,255,0.08)",
@@ -4716,6 +4741,8 @@ export default function App(){
       </header>
 
       <main style={{position:"relative",zIndex:1}}>
+        {/* Page transition — remounts with a fresh fade+slide every time the tab changes */}
+        <div key={tab} style={{animation:"pageIn 0.4s cubic-bezier(0.34,1.2,0.64,1) both"}}>
         {tab==="quests"&&(
           <div style={{maxWidth:560,margin:"20px auto 0",padding:"0 24px"}}>
             <StatsBar quests={quests}/>
@@ -4959,6 +4986,7 @@ export default function App(){
             )}
           </div>
         )}
+        </div>
       </main>
       </div>
       {/* end scrollable content area */}
@@ -4974,7 +5002,7 @@ export default function App(){
               background:"rgba(14,14,18,0.92)",backdropFilter:"blur(12px)",
               boxShadow:"0 4px 20px rgba(0,0,0,0.5)",
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:20,transition:"transform 0.2s"}}
+              fontSize:20,transition:"transform 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}
               onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
               onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
               ✨
