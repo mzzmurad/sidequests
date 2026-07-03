@@ -536,6 +536,34 @@ const Icons={
   chevronRight: "M9 18l6-6-6-6",
 };
 
+// ─── PROGRESS RING (Apple-Fitness-style circular XP indicator) ───────────────
+function ProgressRing({ size=76, stroke=5, pct=0, color="#A8FF78", glow=true, children }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - Math.min(Math.max(pct,0),100) / 100);
+  return (
+    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
+      <svg width={size} height={size} style={{position:"absolute",inset:0,
+        transform:"rotate(-90deg)",filter:glow?`drop-shadow(0 0 6px ${color}70)`:"none"}}>
+        {/* Track */}
+        <circle cx={size/2} cy={size/2} r={r} fill="none"
+          stroke="rgba(255,255,255,0.07)" strokeWidth={stroke}/>
+        {/* Progress arc */}
+        <circle cx={size/2} cy={size/2} r={r} fill="none"
+          stroke={color} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={offset}
+          style={{transition:"stroke-dashoffset 1s cubic-bezier(0.34,1.2,0.64,1)"}}/>
+      </svg>
+      {children&&(
+        <div style={{position:"absolute",inset:stroke+3,borderRadius:"50%",
+          display:"flex",alignItems:"center",justifyContent:"center"}}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── SMALL HELPERS ────────────────────────────────────────────────────────────
 function ActionBtn({onClick,children,danger,title}){
   const [h,setH]=useState(false);
@@ -2577,39 +2605,33 @@ function RankBadge({ xp, size="sm" }) {
       </span>
     </div>
   );
-  // Large version for profile
+  // Large version for profile — Apple-Fitness-style ring around the rank icon
   return (
     <div style={{background:`${rank.color}10`,border:`1px solid ${rank.color}30`,
-      borderRadius:16,padding:"16px 20px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-        <span style={{fontSize:36}}>{rank.icon}</span>
-        <div>
-          <div style={{fontSize:20,fontWeight:700,color:rank.color,
-            fontFamily:"'Cormorant Garamond',serif"}}>{rank.name}</div>
-          <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
-            {xp} XP total
-          </div>
+      borderRadius:16,padding:"16px 20px",display:"flex",alignItems:"center",gap:16}}>
+      <ProgressRing size={66} stroke={5} pct={pct} color={rank.color}>
+        <span style={{fontSize:26}}>{rank.icon}</span>
+      </ProgressRing>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:19,fontWeight:700,color:rank.color,
+          fontFamily:"'Cormorant Garamond',serif"}}>{rank.name}</div>
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
+          {xp} XP total
         </div>
-        {next&&<div style={{marginLeft:"auto",textAlign:"right"}}>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Next rank</div>
-          <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.6)",fontFamily:"'DM Sans',sans-serif"}}>{next.name}</div>
-        </div>}
+        {next?(
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginTop:3}}>
+            {next.min - xp} XP to <span style={{color:"rgba(255,255,255,0.5)",fontWeight:600}}>{next.name}</span>
+          </div>
+        ):(
+          <div style={{fontSize:11,color:rank.color,fontFamily:"'DM Sans',sans-serif",marginTop:3,fontWeight:600}}>
+            Max rank reached
+          </div>
+        )}
       </div>
       {next&&(
-        <div>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-            <span style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>PROGRESS</span>
-            <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>{pct}%</span>
-          </div>
-          <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:2}}>
-            <div style={{height:"100%",borderRadius:2,width:`${pct}%`,
-              background:`linear-gradient(90deg,${rank.color}80,${rank.color})`,
-              transition:"width 0.8s cubic-bezier(0.34,1.2,0.64,1)",
-              boxShadow:`0 0 8px ${rank.color}60`}}/>
-          </div>
-          <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",marginTop:5}}>
-            {next.min - xp} XP to {next.name}
-          </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontSize:18,fontWeight:700,color:"#fff",fontFamily:"'Cormorant Garamond',serif"}}>{pct}%</div>
+          <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",letterSpacing:"0.06em"}}>TO NEXT</div>
         </div>
       )}
     </div>
@@ -2982,20 +3004,41 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
         Profile
       </h2>
 
-      {/* Avatar card */}
+      {/* Avatar card — ring shows XP progress to next rank, Apple-Fitness style */}
       <div style={{background:`${color}08`,border:`1px solid ${color}25`,borderRadius:20,
         padding:"24px 20px",marginBottom:16,position:"relative",overflow:"hidden",textAlign:"center"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,height:2,
           background:`linear-gradient(90deg,transparent,${color}80,transparent)`}}/>
-        <div style={{width:76,height:76,borderRadius:20,margin:"0 auto 12px",
-          background:`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
-          border:`2px solid ${color}50`,display:"flex",alignItems:"center",
-          justifyContent:"center",fontSize:38,
-          boxShadow:`0 0 32px ${color}30`}}>{avatar}</div>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
+          <ProgressRing size={96} stroke={5} pct={pct} color={userRank.color}>
+            <div style={{width:76,height:76,borderRadius:20,
+              background:`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+              border:`2px solid ${color}50`,display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:38,
+              boxShadow:`0 0 32px ${color}30`}}>{avatar}</div>
+          </ProgressRing>
+        </div>
         <div style={{fontSize:22,fontWeight:700,color:"#F2F2F2",
           fontFamily:"'Cormorant Garamond',serif",marginBottom:4}}>{preview}</div>
         <div style={{fontSize:11,color:color,fontWeight:700,letterSpacing:"0.08em",
-          textTransform:"uppercase",marginBottom:16}}>{getTitle(preview)}</div>
+          textTransform:"uppercase",marginBottom:14}}>{getTitle(preview)}</div>
+
+        {/* Rank + progress readout — the ring above already IS the progress bar */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:16}}>
+          <span style={{fontSize:15}}>{userRank.icon}</span>
+          <span style={{fontSize:13,fontWeight:700,color:userRank.color,
+            fontFamily:"'DM Sans',sans-serif"}}>{userRank.name}</span>
+          {nextRank?(
+            <span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+              · {nextRank.min-userXP} XP to {nextRank.name}
+            </span>
+          ):(
+            <span style={{fontSize:11,color:userRank.color,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
+              · Max rank
+            </span>
+          )}
+        </div>
+
         {/* Stats row */}
         <div style={{display:"flex",gap:0,borderTop:"1px solid rgba(255,255,255,0.06)",paddingTop:14}}>
           {[
@@ -3012,39 +3055,6 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Rank card */}
-      <div style={{background:`${userRank.color}10`,border:`1px solid ${userRank.color}30`,
-        borderRadius:16,padding:"16px 18px",marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-          <span style={{fontSize:32}}>{userRank.icon}</span>
-          <div style={{flex:1}}>
-            <div style={{fontSize:18,fontWeight:700,color:userRank.color,
-              fontFamily:"'Cormorant Garamond',serif"}}>{userRank.name}</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
-              {userXP} XP total
-            </div>
-          </div>
-          {nextRank&&<div style={{textAlign:"right"}}>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Next</div>
-            <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.6)",
-              fontFamily:"'DM Sans',sans-serif"}}>{nextRank.name}</div>
-          </div>}
-        </div>
-        {nextRank&&(
-          <div>
-            <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:2}}>
-              <div style={{height:"100%",borderRadius:2,width:`${pct}%`,
-                background:`linear-gradient(90deg,${userRank.color}80,${userRank.color})`,
-                transition:"width 0.8s cubic-bezier(0.34,1.2,0.64,1)",
-                boxShadow:`0 0 8px ${userRank.color}60`}}/>
-            </div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",marginTop:5}}>
-              {nextRank.min-userXP} XP to {nextRank.name}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Lifetime stats */}
