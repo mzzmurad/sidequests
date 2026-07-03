@@ -3312,8 +3312,10 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
   const [query, setQuery]       = useState("");
   const [results, setResults]   = useState([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [saving, setSaving]     = useState(false);
   const debounce = useRef(null);
+  const latestQuery = useRef(""); // guards against a slower, older request overwriting a newer one
 
   const [title, setTitle]     = useState(movie?.title||"");
   const [poster, setPoster]   = useState(movie?.poster||null);
@@ -3329,27 +3331,30 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
   const close=()=>{ setVisible(false); setTimeout(onClose,250); };
 
   const search = async(q)=>{
-    if(!q||q.length<2){ setResults([]); return; }
+    const trimmed = q.trim();
+    latestQuery.current = trimmed;
+    if(!trimmed||trimmed.length<2){ setResults([]); setSearching(false); return; }
     setSearching(true);
+    setSearchError(false);
     try {
-      // country=US pulls the full/largest catalog; higher per-type limit + a second
-      // "movieTerm-only" pass catches franchise entries (Dune, Spider-Man, etc.)
-      // that sometimes get pushed out by soundtracks/bonus content/other regions.
-      const [mRes,mRes2,tRes] = await Promise.all([
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&country=US&lang=en_us&limit=15`).then(r=>r.json()).catch(()=>({results:[]})),
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&attribute=movieTerm&country=US&lang=en_us&limit=15`).then(r=>r.json()).catch(()=>({results:[]})),
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=tvShow&entity=tvSeason&country=US&lang=en_us&limit=10`).then(r=>r.json()).catch(()=>({results:[]})),
+      const [mRes,tRes] = await Promise.all([
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(trimmed)}&media=movie&country=US&limit=20`).then(r=>r.json()),
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(trimmed)}&media=tvShow&entity=tvSeason&country=US&limit=12`).then(r=>r.json()),
       ]);
-      const toMovie = r=>({
+
+      // A newer keystroke already kicked off a fresher search — throw this stale
+      // response away instead of letting it clobber what's currently on screen.
+      if(latestQuery.current !== trimmed) return;
+
+      const movies = (mRes.results||[]).map(r=>({
         title:r.trackName, year:(r.releaseDate||"").slice(0,4),
-        poster:(r.artworkUrl100||"").replace("100x100","500x500"), type:"movie",
-      });
-      const movies = [...(mRes.results||[]),...(mRes2.results||[])]
-        .filter(r=>r.kind==="feature-movie"||!r.kind)
-        .map(toMovie);
+        poster:(r.artworkUrl100||"").replace("100x100bb","600x600bb").replace("100x100","500x500"),
+        type:"movie",
+      }));
       const shows = (tRes.results||[]).map(r=>({
         title:r.collectionName||r.trackName, year:(r.releaseDate||"").slice(0,4),
-        poster:(r.artworkUrl100||"").replace("100x100","500x500"), type:"tv",
+        poster:(r.artworkUrl100||"").replace("100x100bb","600x600bb").replace("100x100","500x500"),
+        type:"tv",
       }));
 
       // De-dupe by title+year
@@ -3359,27 +3364,29 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
         const k=(r.title+r.year).toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true;
       });
 
-      // Relevance sort: exact match, then starts-with, then contains, then everything else —
-      // this is what actually fixes big franchise titles (Dune, Spider-Man) getting buried.
-      const qLower = q.trim().toLowerCase();
-      const score = (title)=>{
-        const t = title.toLowerCase();
-        if(t===qLower) return 0;
-        if(t.startsWith(qLower)) return 1;
-        if(t.includes(qLower)) return 2;
+      // Relevance sort: exact match, then starts-with, then contains, then everything else.
+      const qLower = trimmed.toLowerCase();
+      const score = (t)=>{
+        const s = t.toLowerCase();
+        if(s===qLower) return 0;
+        if(s.startsWith(qLower)) return 1;
+        if(s.includes(qLower)) return 2;
         return 3;
       };
       merged.sort((a,b)=>score(a.title)-score(b.title));
 
-      setResults(merged.slice(0,14));
-    } catch(e){ console.error(e); }
-    setSearching(false);
+      setResults(merged.slice(0,16));
+    } catch(e) {
+      console.error("Movie search failed:", e);
+      if(latestQuery.current === trimmed) { setResults([]); setSearchError(true); }
+    }
+    if(latestQuery.current === trimmed) setSearching(false);
   };
 
   const onTitleChange = (v)=>{
     setTitle(v); setPickedFromSearch(false);
     clearTimeout(debounce.current);
-    debounce.current = setTimeout(()=>search(v), 350);
+    debounce.current = setTimeout(()=>search(v), 300);
   };
 
   const pick = (r)=>{
@@ -3464,6 +3471,16 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
                   </div>
                 </button>
               ))}
+            </div>
+          )}
+          {!searching&&!pickedFromSearch&&title.trim().length>=2&&results.length===0&&(
+            <div style={{marginTop:8,padding:"12px 14px",borderRadius:12,
+              background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)"}}>
+              <p style={{fontSize:12,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",margin:0,lineHeight:1.5}}>
+                {searchError
+                  ? "Search hiccuped — check your connection and try again, or just save with the title as-is."
+                  : "No matches found — you can still save with just the title, no poster needed."}
+              </p>
             </div>
           )}
           {poster&&pickedFromSearch&&(
