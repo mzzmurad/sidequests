@@ -319,6 +319,21 @@ const sb = {
     await fetch(`${SUPABASE_URL}/rest/v1/memories?id=eq.${id}`, {method:"DELETE", headers:this.h});
   },
 
+  // ── Movies (Letterboxd-style log) ───────────────────────────────────────────
+  async getMovies(userId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/movies?user_id=eq.${userId}&order=watched_date.desc.nullslast,created_at.desc`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+  async upsertMovie(movie) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/movies`, {
+      method:"POST", headers:{...this.h,"Prefer":"resolution=merge-duplicates"},
+      body:JSON.stringify(movie)
+    }); if(!r.ok) throw new Error();
+  },
+  async deleteMovie(id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/movies?id=eq.${id}`, {method:"DELETE", headers:this.h});
+  },
+
   // ── Boards ────────────────────────────────────────────────────────────────
   async getMyBoards(userId) {
     // Get boards where user is creator or member
@@ -473,10 +488,14 @@ const RANKS = [
   { name:"Legend",     min:2000, max:9999, icon:"🔥",  color:"#E879F9" },
 ];
 
+// XP is earned ONLY by completing quests — creating/having active quests gives nothing.
+// Harder quests are worth more, matching the difficulty badge you set on the quest.
 const XP_VALUES = {
-  Active:    10,  // just creating an active quest
-  Completed: 50,  // completing a quest
-  Hard:      25,  // bonus for hard quests (future)
+  Completed: 50,  // default completion XP (no difficulty set)
+  easy:      25,
+  medium:    50,
+  hard:      75,
+  legendary: 150,
 };
 
 const getRank = (xp) => RANKS.slice().reverse().find(r => xp >= r.min) || RANKS[0];
@@ -484,8 +503,9 @@ const getRank = (xp) => RANKS.slice().reverse().find(r => xp >= r.min) || RANKS[
 const calcXP = (quests) => {
   let xp = 0;
   quests.forEach(q => {
-    xp += XP_VALUES.Active; // 10 XP per quest created
-    if(q.status === "Completed") xp += XP_VALUES.Completed; // +50 on complete
+    if(q.status === "Completed") {
+      xp += XP_VALUES[q.difficulty] || XP_VALUES.Completed;
+    }
   });
   return xp;
 };
@@ -534,6 +554,8 @@ const Icons={
   copy:    "M20 9H11a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
   dots:    "M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
   chevronRight: "M9 18l6-6-6-6",
+  star:    "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
+  film:    "M7 3v18M17 3v18M2 8h5M17 8h5M2 16h5M17 16h5M2 3h20a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z",
 };
 
 // ─── PROGRESS RING (Apple-Fitness-style circular XP indicator) ───────────────
@@ -3096,6 +3118,420 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
 }
 
 
+
+// ─── MOVIES / SHOWS LOG (Letterboxd-style) ────────────────────────────────────
+const MOVIE_ACCENT = "#FBBF24"; // cinematic gold — used for ratings & accents
+
+function StarRating({ value=0, onChange, size=18, readOnly=false }) {
+  const [hover, setHover] = useState(0);
+  const display = hover || value;
+  return (
+    <div style={{display:"flex",gap:2}} onMouseLeave={()=>setHover(0)}>
+      {[1,2,3,4,5].map(n=>(
+        <button key={n} type="button" disabled={readOnly}
+          onClick={()=>onChange&&onChange(n===value?0:n)}
+          onMouseEnter={()=>!readOnly&&setHover(n)}
+          style={{background:"none",border:"none",padding:1,
+            cursor:readOnly?"default":"pointer",lineHeight:0}}>
+          <Icon d={Icons.star} size={size}
+            fill={n<=display?MOVIE_ACCENT:"none"}
+            stroke={n<=display?MOVIE_ACCENT:"rgba(255,255,255,0.25)"}/>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const MOVIE_STATUSES = [
+  {id:"watched",  label:"Watched",       icon:"🎬"},
+  {id:"watching", label:"Watching",      icon:"👀"},
+  {id:"want",     label:"Want to Watch", icon:"🍿"},
+];
+
+function MoviesPage({ user }) {
+  const [movies, setMovies]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [filter, setFilter]       = useState("all");
+  const [editing, setEditing]     = useState(null); // movie object or "new" or null
+
+  const load = async()=>{
+    setLoading(true);
+    try { setMovies(await sb.getMovies(user.id)); } catch(e){ console.error(e); }
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const filtered = filter==="all" ? movies : movies.filter(m=>m.status===filter);
+  const watchedCount = movies.filter(m=>m.status==="watched").length;
+  const thisYear = new Date().getFullYear();
+  const thisYearCount = movies.filter(m=>m.status==="watched" && m.watched_date && new Date(m.watched_date).getFullYear()===thisYear).length;
+  const rated = movies.filter(m=>m.rating>0);
+  const avgRating = rated.length ? (rated.reduce((s,m)=>s+m.rating,0)/rated.length).toFixed(1) : "—";
+
+  const handleSave = async(movie)=>{
+    await sb.upsertMovie({...movie, user_id:user.id});
+    await load();
+    setEditing(null);
+  };
+  const handleDelete = async(id)=>{
+    await sb.deleteMovie(id);
+    await load();
+    setEditing(null);
+  };
+
+  return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
+      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+        color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Watchlist</p>
+      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:16}}>
+        Movies & Shows
+      </h2>
+
+      {/* Stats */}
+      <div style={{display:"flex",gap:10,marginBottom:16}}>
+        {[
+          {l:"Watched",v:watchedCount},
+          {l:`${thisYear}`,v:thisYearCount},
+          {l:"Avg Rating",v:avgRating},
+        ].map(({l,v})=>(
+          <div key={l} style={{flex:1,textAlign:"center",background:"rgba(255,255,255,0.03)",
+            border:`1px solid ${MOVIE_ACCENT}20`,borderRadius:12,padding:"10px 8px"}}>
+            <div style={{fontSize:20,fontWeight:700,color:MOVIE_ACCENT,
+              fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:"0.08em",
+              marginTop:3,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter pills */}
+      <div style={{display:"flex",gap:7,marginBottom:16,overflowX:"auto"}}>
+        {[{id:"all",label:"All",icon:"🎞"},...MOVIE_STATUSES].map(s=>{
+          const active=filter===s.id;
+          return(
+            <button key={s.id} onClick={()=>setFilter(s.id)} style={{
+              padding:"6px 13px",borderRadius:20,fontSize:11,fontWeight:600,
+              cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+              border:`1px solid ${active?MOVIE_ACCENT:"rgba(255,255,255,0.09)"}`,
+              background:active?`${MOVIE_ACCENT}18`:"transparent",
+              color:active?MOVIE_ACCENT:"rgba(255,255,255,0.3)",
+              transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",flexShrink:0,
+            }}>{s.icon} {s.label}</button>
+          );
+        })}
+      </div>
+
+      {loading?(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+          {[...Array(6)].map((_,i)=>(
+            <div key={i} style={{aspectRatio:"2/3",borderRadius:12,
+              background:"rgba(255,255,255,0.04)",animation:"pulseDot 1.4s ease-in-out infinite",
+              animationDelay:`${i*0.08}s`}}/>
+          ))}
+        </div>
+      ):filtered.length===0?(
+        <div style={{textAlign:"center",padding:"60px 0"}}>
+          <div style={{fontSize:40,marginBottom:12,opacity:0.15}}>🎬</div>
+          <p style={{fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
+            Nothing logged yet.<br/>Add the first thing you watched.
+          </p>
+        </div>
+      ):(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+          {filtered.map((m,i)=>(
+            <button key={m.id} onClick={()=>setEditing(m)} style={{
+              position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",
+              border:"1px solid rgba(255,255,255,0.08)",cursor:"pointer",padding:0,
+              background:"rgba(255,255,255,0.03)",
+              animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
+            }}>
+              {m.poster?(
+                <img src={m.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+              ):(
+                <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
+                  justifyContent:"center",padding:8,textAlign:"center",
+                  background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                    fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
+                </div>
+              )}
+              {/* Status corner tag */}
+              {m.status!=="watched"&&(
+                <div style={{position:"absolute",top:5,right:5,fontSize:13,
+                  background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"2px 4px"}}>
+                  {MOVIE_STATUSES.find(s=>s.id===m.status)?.icon}
+                </div>
+              )}
+              {/* Rating strip */}
+              {m.rating>0&&(
+                <div style={{position:"absolute",bottom:0,left:0,right:0,
+                  background:"linear-gradient(to top,rgba(0,0,0,0.85),transparent)",
+                  padding:"14px 5px 5px",display:"flex",justifyContent:"center",gap:1}}>
+                  {[1,2,3,4,5].map(n=>(
+                    <Icon key={n} d={Icons.star} size={9}
+                      fill={n<=m.rating?MOVIE_ACCENT:"none"}
+                      stroke={n<=m.rating?MOVIE_ACCENT:"rgba(255,255,255,0.3)"}/>
+                  ))}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* FAB */}
+      <button onClick={()=>setEditing("new")} style={{
+        position:"fixed",right:20,bottom:96,zIndex:60,
+        width:56,height:56,borderRadius:18,border:"none",cursor:"pointer",
+        background:`linear-gradient(135deg,${MOVIE_ACCENT},#F59E0B)`,color:"#0A0A0C",
+        display:"flex",alignItems:"center",justifyContent:"center",
+        boxShadow:`0 6px 24px ${MOVIE_ACCENT}40,0 2px 10px rgba(0,0,0,0.5)`,
+        transition:"transform 0.2s cubic-bezier(0.34,1.56,0.64,1)"}}
+        onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
+        onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+        <Icon d={Icons.plus} size={24} stroke="#0A0A0C"/>
+      </button>
+
+      {editing&&(
+        <MovieModal
+          movie={editing==="new"?null:editing}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onClose={()=>setEditing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── MOVIE ADD/EDIT MODAL — search via iTunes (free, no API key) ─────────────
+function MovieModal({ movie, onSave, onDelete, onClose }) {
+  const [visible, setVisible]   = useState(false);
+  const [query, setQuery]       = useState("");
+  const [results, setResults]   = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const debounce = useRef(null);
+
+  const [title, setTitle]     = useState(movie?.title||"");
+  const [poster, setPoster]   = useState(movie?.poster||null);
+  const [year, setYear]       = useState(movie?.year||"");
+  const [mediaType, setMediaType] = useState(movie?.media_type||"movie");
+  const [status, setStatus]   = useState(movie?.status||"watched");
+  const [rating, setRating]   = useState(movie?.rating||0);
+  const [watchedDate, setWatchedDate] = useState(movie?.watched_date||new Date().toISOString().slice(0,10));
+  const [review, setReview]   = useState(movie?.review||"");
+  const [pickedFromSearch, setPickedFromSearch] = useState(!!movie);
+
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  const search = async(q)=>{
+    if(!q||q.length<2){ setResults([]); return; }
+    setSearching(true);
+    try {
+      const [mRes,tRes] = await Promise.all([
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&limit=6`).then(r=>r.json()),
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=tvShow&entity=tvSeason&limit=6`).then(r=>r.json()),
+      ]);
+      const movies = (mRes.results||[]).map(r=>({
+        title:r.trackName, year:(r.releaseDate||"").slice(0,4),
+        poster:(r.artworkUrl100||"").replace("100x100","500x500"), type:"movie",
+      }));
+      const shows = (tRes.results||[]).map(r=>({
+        title:r.collectionName||r.trackName, year:(r.releaseDate||"").slice(0,4),
+        poster:(r.artworkUrl100||"").replace("100x100","500x500"), type:"tv",
+      }));
+      // De-dupe by title, interleave
+      const seen = new Set();
+      const merged = [...movies,...shows].filter(r=>{
+        const k=r.title+r.year; if(seen.has(k)) return false; seen.add(k); return true;
+      });
+      setResults(merged.slice(0,8));
+    } catch(e){ console.error(e); }
+    setSearching(false);
+  };
+
+  const onTitleChange = (v)=>{
+    setTitle(v); setPickedFromSearch(false);
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(()=>search(v), 350);
+  };
+
+  const pick = (r)=>{
+    setTitle(r.title); setPoster(r.poster); setYear(r.year);
+    setMediaType(r.type); setResults([]); setPickedFromSearch(true);
+  };
+
+  const save = async()=>{
+    if(!title.trim()) return;
+    setSaving(true);
+    await onSave({
+      id: movie?.id || crypto.randomUUID(),
+      title: title.trim(), poster, year, media_type: mediaType,
+      status, rating, watched_date: status==="want"?null:watchedDate,
+      review: review.trim(), created_at: movie?.created_at || new Date().toISOString(),
+    });
+    setSaving(false);
+  };
+
+  const lbl = {fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+    color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7,display:"block"};
+  const inp = {width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+    borderRadius:12,padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",
+    fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"};
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.78:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
+      justifyContent:"center",zIndex:9999,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
+        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        width:"100%",maxWidth:560,padding:"12px 22px 44px",
+        display:"flex",flexDirection:"column",gap:14,
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
+        maxHeight:"88vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <h2 style={{margin:0,fontSize:19,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
+            {movie?"Edit Entry":"Log a Watch"}
+          </h2>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:10,padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+            <Icon d={Icons.x} size={16}/>
+          </button>
+        </div>
+
+        {/* Title + search */}
+        <div style={{position:"relative"}}>
+          <label style={lbl}>Title</label>
+          <input value={title} onChange={e=>onTitleChange(e.target.value)}
+            placeholder="Search a movie or show…" style={inp}/>
+          {searching&&<div style={{position:"absolute",right:12,top:34}}>
+            <div style={{width:14,height:14,border:"2px solid rgba(255,255,255,0.1)",
+              borderTopColor:MOVIE_ACCENT,borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+          </div>}
+          {results.length>0&&!pickedFromSearch&&(
+            <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,
+              maxHeight:280,overflowY:"auto",border:"1px solid rgba(255,255,255,0.08)",
+              borderRadius:14,padding:6,background:"rgba(255,255,255,0.02)"}}>
+              {results.map((r,i)=>(
+                <button key={i} onClick={()=>pick(r)} style={{
+                  display:"flex",alignItems:"center",gap:10,padding:6,borderRadius:10,
+                  border:"none",background:"transparent",cursor:"pointer",textAlign:"left"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.05)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  {r.poster?(
+                    <img src={r.poster} alt="" style={{width:32,height:46,objectFit:"cover",
+                      borderRadius:5,flexShrink:0}}/>
+                  ):(
+                    <div style={{width:32,height:46,borderRadius:5,flexShrink:0,
+                      background:"rgba(255,255,255,0.06)"}}/>
+                  )}
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#F0F0F0",
+                      fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",overflow:"hidden",
+                      textOverflow:"ellipsis"}}>{r.title}</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",
+                      fontFamily:"'DM Sans',sans-serif"}}>{r.year} · {r.type==="tv"?"TV":"Movie"}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {poster&&pickedFromSearch&&(
+            <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10,
+              padding:"8px 10px",borderRadius:12,background:`${MOVIE_ACCENT}0C`,
+              border:`1px solid ${MOVIE_ACCENT}25`}}>
+              <img src={poster} alt="" style={{width:34,height:48,objectFit:"cover",borderRadius:6}}/>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",fontFamily:"'DM Sans',sans-serif"}}>
+                {year} · {mediaType==="tv"?"TV Show":"Movie"}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Type toggle (manual override) */}
+        <div style={{display:"flex",gap:8}}>
+          {["movie","tv"].map(t=>(
+            <button key={t} onClick={()=>setMediaType(t)} style={{
+              flex:1,padding:"9px",borderRadius:12,border:"none",cursor:"pointer",
+              background:mediaType===t?`${MOVIE_ACCENT}18`:"rgba(255,255,255,0.04)",
+              outline:mediaType===t?`1px solid ${MOVIE_ACCENT}50`:"1px solid rgba(255,255,255,0.08)",
+              color:mediaType===t?MOVIE_ACCENT:"rgba(255,255,255,0.35)",
+              fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+              {t==="movie"?"🎬 Movie":"📺 TV Show"}
+            </button>
+          ))}
+        </div>
+
+        {/* Status */}
+        <div>
+          <label style={lbl}>Status</label>
+          <div style={{display:"flex",gap:8}}>
+            {MOVIE_STATUSES.map(s=>(
+              <button key={s.id} onClick={()=>setStatus(s.id)} style={{
+                flex:1,padding:"9px 6px",borderRadius:12,border:"none",cursor:"pointer",
+                background:status===s.id?`${MOVIE_ACCENT}18`:"rgba(255,255,255,0.04)",
+                outline:status===s.id?`1px solid ${MOVIE_ACCENT}50`:"1px solid rgba(255,255,255,0.08)",
+                color:status===s.id?MOVIE_ACCENT:"rgba(255,255,255,0.35)",
+                fontSize:11,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+                {s.icon} {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Rating */}
+        <div>
+          <label style={lbl}>Your Rating</label>
+          <StarRating value={rating} onChange={setRating} size={26}/>
+        </div>
+
+        {/* Watched date */}
+        {status!=="want"&&(
+          <div>
+            <label style={lbl}>{status==="watching"?"Started":"Watched On"}</label>
+            <input type="date" value={watchedDate} onChange={e=>setWatchedDate(e.target.value)} style={inp}/>
+          </div>
+        )}
+
+        {/* Review */}
+        <div>
+          <label style={lbl}>Review / Thoughts</label>
+          <textarea value={review} onChange={e=>setReview(e.target.value)}
+            placeholder="What did you think?" rows={3}
+            style={{...inp,resize:"vertical",lineHeight:1.6}}/>
+        </div>
+
+        {/* Buttons */}
+        <div style={{display:"flex",gap:10}}>
+          {movie&&(
+            <button onClick={()=>onDelete(movie.id)} style={{padding:"14px",borderRadius:12,
+              background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",
+              color:"#FF7878",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+              Delete
+            </button>
+          )}
+          <button onClick={save} disabled={!title.trim()||saving} style={{flex:1,padding:"14px",borderRadius:12,
+            background:`linear-gradient(135deg,${MOVIE_ACCENT},#F59E0B)`,
+            color:"#0A0A0C",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,
+            fontFamily:"'DM Sans',sans-serif",opacity:(!title.trim()||saving)?0.6:1}}>
+            {saving?"Saving…":movie?"Update Entry":"Log It"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+
 // ─── MEMORIES PAGE ────────────────────────────────────────────────────────────
 function MemoriesPage({ user }) {
   const [viewDate, setViewDate]   = useState(new Date());
@@ -4590,6 +5026,7 @@ export default function App(){
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"memories", label:"Memories", icon:Icons.camera, count:0},
+    {id:"movies",   label:"Movies",   icon:Icons.film,   count:0},
     {id:"map",      label:"Map",      icon:Icons.globe,  count:quests.filter(q=>q.location?.name).length},
     {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
     {id:"profile",  label:"Profile",  icon:Icons.user,   count:0},
@@ -4932,6 +5369,10 @@ export default function App(){
 
         {tab==="memories"&&(
           <MemoriesPage user={user}/>
+        )}
+
+        {tab==="movies"&&(
+          <MoviesPage user={user}/>
         )}
 
         {/* MAP TAB */}
