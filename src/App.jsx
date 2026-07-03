@@ -3332,24 +3332,46 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
     if(!q||q.length<2){ setResults([]); return; }
     setSearching(true);
     try {
-      const [mRes,tRes] = await Promise.all([
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&limit=6`).then(r=>r.json()),
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=tvShow&entity=tvSeason&limit=6`).then(r=>r.json()),
+      // country=US pulls the full/largest catalog; higher per-type limit + a second
+      // "movieTerm-only" pass catches franchise entries (Dune, Spider-Man, etc.)
+      // that sometimes get pushed out by soundtracks/bonus content/other regions.
+      const [mRes,mRes2,tRes] = await Promise.all([
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&country=US&lang=en_us&limit=15`).then(r=>r.json()).catch(()=>({results:[]})),
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&attribute=movieTerm&country=US&lang=en_us&limit=15`).then(r=>r.json()).catch(()=>({results:[]})),
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=tvShow&entity=tvSeason&country=US&lang=en_us&limit=10`).then(r=>r.json()).catch(()=>({results:[]})),
       ]);
-      const movies = (mRes.results||[]).map(r=>({
+      const toMovie = r=>({
         title:r.trackName, year:(r.releaseDate||"").slice(0,4),
         poster:(r.artworkUrl100||"").replace("100x100","500x500"), type:"movie",
-      }));
+      });
+      const movies = [...(mRes.results||[]),...(mRes2.results||[])]
+        .filter(r=>r.kind==="feature-movie"||!r.kind)
+        .map(toMovie);
       const shows = (tRes.results||[]).map(r=>({
         title:r.collectionName||r.trackName, year:(r.releaseDate||"").slice(0,4),
         poster:(r.artworkUrl100||"").replace("100x100","500x500"), type:"tv",
       }));
-      // De-dupe by title, interleave
+
+      // De-dupe by title+year
       const seen = new Set();
-      const merged = [...movies,...shows].filter(r=>{
-        const k=r.title+r.year; if(seen.has(k)) return false; seen.add(k); return true;
+      let merged = [...movies,...shows].filter(r=>{
+        if(!r.title) return false;
+        const k=(r.title+r.year).toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true;
       });
-      setResults(merged.slice(0,8));
+
+      // Relevance sort: exact match, then starts-with, then contains, then everything else —
+      // this is what actually fixes big franchise titles (Dune, Spider-Man) getting buried.
+      const qLower = q.trim().toLowerCase();
+      const score = (title)=>{
+        const t = title.toLowerCase();
+        if(t===qLower) return 0;
+        if(t.startsWith(qLower)) return 1;
+        if(t.includes(qLower)) return 2;
+        return 3;
+      };
+      merged.sort((a,b)=>score(a.title)-score(b.title));
+
+      setResults(merged.slice(0,14));
     } catch(e){ console.error(e); }
     setSearching(false);
   };
