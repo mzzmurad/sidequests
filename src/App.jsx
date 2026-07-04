@@ -3928,6 +3928,7 @@ function MoviesPage({ user }) {
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState("all");
   const [editing, setEditing]     = useState(null); // movie object or "new" or null
+  const [expandedShows, setExpandedShows] = useState({}); // showKey -> bool, toggles the season stack open
 
   const load = async()=>{
     setLoading(true);
@@ -3937,6 +3938,35 @@ function MoviesPage({ user }) {
   useEffect(()=>{ load(); },[]);
 
   const filtered = filter==="all" ? movies : movies.filter(m=>m.status===filter);
+
+  // Bundle multiple seasons of the same show into one stacked card. Movies, and
+  // shows you've only logged one season of, render as a normal single card.
+  const showKeyOf = (m)=> m.tmdb_id ? `tv-${m.tmdb_id}` : `tv-title-${(m.title||"").toLowerCase()}`;
+  const displayItems = (()=>{
+    const groups = {};
+    const order = [];
+    const seenKeys = new Set();
+    filtered.forEach(m=>{
+      if(m.media_type==="tv"){
+        const key = showKeyOf(m);
+        if(!groups[key]) groups[key]=[];
+        groups[key].push(m);
+        if(!seenKeys.has(key)){ seenKeys.add(key); order.push({kind:"group",key}); }
+      } else {
+        order.push({kind:"single",movie:m});
+      }
+    });
+    const items = [];
+    order.forEach(entry=>{
+      if(entry.kind==="single"){ items.push({kind:"single",movie:entry.movie}); return; }
+      const seasons = [...groups[entry.key]].sort((a,b)=>(a.season_number||0)-(b.season_number||0));
+      if(seasons.length===1){ items.push({kind:"single",movie:seasons[0]}); return; }
+      items.push({kind:"stack",key:entry.key,seasons});
+      if(expandedShows[entry.key]) seasons.forEach(s=>items.push({kind:"single",movie:s,isChild:true}));
+    });
+    return items;
+  })();
+
   const watchedCount = movies.filter(m=>m.status==="watched").length;
   const thisYear = new Date().getFullYear();
   const thisYearCount = movies.filter(m=>m.status==="watched" && m.watched_date && new Date(m.watched_date).getFullYear()===thisYear).length;
@@ -4015,52 +4045,106 @@ function MoviesPage({ user }) {
         </div>
       ):(
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-          {filtered.map((m,i)=>(
-            <button key={m.id} onClick={()=>setEditing(m)} style={{
-              position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",
-              border:"1px solid rgba(255,255,255,0.08)",cursor:"pointer",padding:0,
-              background:"rgba(255,255,255,0.03)",
-              animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
-            }}>
-              {m.poster?(
-                <img src={m.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-              ):(
-                <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
-                  justifyContent:"center",padding:8,textAlign:"center",
-                  background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
-                  <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",
-                    fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
-                </div>
-              )}
-              {/* Season tag — top left */}
-              {m.season_number!=null&&(
-                <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
-                  background:"rgba(0,0,0,0.65)",color:MOVIE_ACCENT,borderRadius:5,
-                  padding:"2px 5px",fontFamily:"'DM Sans',sans-serif"}}>
-                  S{m.season_number}
-                </div>
-              )}
-              {/* Status corner tag */}
-              {m.status!=="watched"&&(
-                <div style={{position:"absolute",top:5,right:5,fontSize:13,
-                  background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"2px 4px"}}>
-                  {MOVIE_STATUSES.find(s=>s.id===m.status)?.icon}
-                </div>
-              )}
-              {/* Rating strip */}
-              {m.rating>0&&(
-                <div style={{position:"absolute",bottom:0,left:0,right:0,
-                  background:"linear-gradient(to top,rgba(0,0,0,0.85),transparent)",
-                  padding:"14px 5px 5px",display:"flex",justifyContent:"center",gap:1}}>
-                  {[1,2,3,4,5].map(n=>(
-                    <Icon key={n} d={Icons.star} size={9}
-                      fill={n<=m.rating?MOVIE_ACCENT:"none"}
-                      stroke={n<=m.rating?MOVIE_ACCENT:"rgba(255,255,255,0.3)"}/>
-                  ))}
-                </div>
-              )}
-            </button>
-          ))}
+          {displayItems.map((entry,i)=>{
+            if(entry.kind==="stack"){
+              const { key, seasons } = entry;
+              const cover = seasons[seasons.length-1]; // most recent season's poster as the face card
+              const isOpen = !!expandedShows[key];
+              return (
+                <button key={key} onClick={()=>setExpandedShows(s=>({...s,[key]:!s[key]}))} style={{
+                  position:"relative",aspectRatio:"2/3",borderRadius:12,padding:0,cursor:"pointer",
+                  border:`1px solid ${isOpen?MOVIE_ACCENT+"50":"rgba(255,255,255,0.08)"}`,
+                  background:"transparent",overflow:"visible",
+                  animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
+                }}>
+                  {/* Stacked card edges peeking out behind the face card */}
+                  <div style={{position:"absolute",inset:0,transform:"translate(5px,5px)",
+                    borderRadius:12,background:"rgba(255,255,255,0.05)",
+                    border:"1px solid rgba(255,255,255,0.06)",zIndex:0}}/>
+                  <div style={{position:"absolute",inset:0,transform:"translate(2.5px,2.5px)",
+                    borderRadius:12,background:"rgba(255,255,255,0.06)",
+                    border:"1px solid rgba(255,255,255,0.07)",zIndex:1}}/>
+                  <div style={{position:"relative",zIndex:2,width:"100%",height:"100%",
+                    borderRadius:12,overflow:"hidden",background:"rgba(255,255,255,0.03)"}}>
+                    {cover.poster?(
+                      <img src={cover.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    ):(
+                      <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
+                        justifyContent:"center",padding:8,textAlign:"center",
+                        background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                          fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{cover.title}</span>
+                      </div>
+                    )}
+                    {/* Season count badge */}
+                    <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
+                      background:"rgba(0,0,0,0.7)",color:MOVIE_ACCENT,borderRadius:5,
+                      padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",display:"flex",
+                      alignItems:"center",gap:3}}>
+                      <Icon d={Icons.film} size={9} stroke={MOVIE_ACCENT}/>
+                      {seasons.length} seasons
+                    </div>
+                    {/* Open/close indicator */}
+                    <div style={{position:"absolute",bottom:5,right:5,width:20,height:20,borderRadius:"50%",
+                      background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",
+                      transition:"transform 0.25s cubic-bezier(0.34,1.2,0.64,1)",
+                      transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>
+                      <Icon d={Icons.chevron} size={11} stroke="rgba(255,255,255,0.8)"/>
+                    </div>
+                  </div>
+                </button>
+              );
+            }
+
+            const m = entry.movie;
+            return (
+              <button key={m.id} onClick={()=>setEditing(m)} style={{
+                position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",
+                border:`1px solid ${entry.isChild?MOVIE_ACCENT+"25":"rgba(255,255,255,0.08)"}`,
+                cursor:"pointer",padding:0,
+                background:"rgba(255,255,255,0.03)",
+                animation:`cardIn 0.35s cubic-bezier(0.34,1.2,0.64,1) both`,
+              }}>
+                {m.poster?(
+                  <img src={m.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                ):(
+                  <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
+                    justifyContent:"center",padding:8,textAlign:"center",
+                    background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
+                    <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                      fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
+                  </div>
+                )}
+                {/* Season tag — top left */}
+                {m.season_number!=null&&(
+                  <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
+                    background:"rgba(0,0,0,0.65)",color:MOVIE_ACCENT,borderRadius:5,
+                    padding:"2px 5px",fontFamily:"'DM Sans',sans-serif"}}>
+                    S{m.season_number}
+                  </div>
+                )}
+                {/* Status corner tag */}
+                {m.status!=="watched"&&(
+                  <div style={{position:"absolute",top:5,right:5,fontSize:13,
+                    background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"2px 4px"}}>
+                    {MOVIE_STATUSES.find(s=>s.id===m.status)?.icon}
+                  </div>
+                )}
+                {/* Rating strip */}
+                {m.rating>0&&(
+                  <div style={{position:"absolute",bottom:0,left:0,right:0,
+                    background:"linear-gradient(to top,rgba(0,0,0,0.85),transparent)",
+                    padding:"14px 5px 5px",display:"flex",justifyContent:"center",gap:1}}>
+                    {[1,2,3,4,5].map(n=>(
+                      <Icon key={n} d={Icons.star} size={9}
+                        fill={n<=m.rating?MOVIE_ACCENT:"none"}
+                        stroke={n<=m.rating?MOVIE_ACCENT:"rgba(255,255,255,0.3)"}/>
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
