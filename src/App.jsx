@@ -3200,6 +3200,7 @@ function FriendProfileModal({ friend, onClose }) {
   const [quests, setQuests]     = useState([]);
   const [movies, setMovies]     = useState([]);
   const [loading, setLoading]   = useState(true);
+  const [selectedMovie, setSelectedMovie] = useState(null);
 
   const {avatar,color} = getCharacter(friend.name||"?");
 
@@ -3397,9 +3398,9 @@ function FriendProfileModal({ friend, onClose }) {
             ):(
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
                 {movies.map((m,i)=>(
-                  <div key={m.id} style={{
-                    position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",
-                    border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.03)",
+                  <button key={m.id} onClick={()=>setSelectedMovie(m)} style={{
+                    position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",padding:0,
+                    border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.03)",cursor:"pointer",
                     animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
                   }}>
                     {m.poster?(
@@ -3412,8 +3413,21 @@ function FriendProfileModal({ friend, onClose }) {
                           fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
                       </div>
                     )}
+                    {m.season_number!=null&&(
+                      <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
+                        background:"rgba(0,0,0,0.65)",color:MOVIE_ACCENT,borderRadius:5,
+                        padding:"2px 5px",fontFamily:"'DM Sans',sans-serif"}}>
+                        S{m.season_number}
+                      </div>
+                    )}
+                    {m.review&&(
+                      <div style={{position:"absolute",top:5,right:5,width:16,height:16,borderRadius:"50%",
+                        background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <Icon d={Icons.film} size={9} stroke={MOVIE_ACCENT}/>
+                      </div>
+                    )}
                     {m.status!=="watched"&&(
-                      <div style={{position:"absolute",top:5,right:5,fontSize:12,
+                      <div style={{position:"absolute",top:m.review?26:5,right:5,fontSize:12,
                         background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"2px 4px"}}>
                         {MOVIE_STATUSES.find(s=>s.id===m.status)?.icon}
                       </div>
@@ -3429,16 +3443,117 @@ function FriendProfileModal({ friend, onClose }) {
                         ))}
                       </div>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             )
+          )}
+        </div>
+
+        {selectedMovie&&(
+          <FriendMovieDetail movie={selectedMovie} onClose={()=>setSelectedMovie(null)}/>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+
+// ─── FRIEND MOVIE DETAIL — read-only, surfaces the review/comment not just the rating ──
+function FriendMovieDetail({ movie, onClose }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+  const statusMeta = MOVIE_STATUSES.find(s=>s.id===movie.status);
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,zIndex:10000,background:`rgba(0,0,0,${visible?0.82:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
+      justifyContent:"center",transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
+        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        width:"100%",maxWidth:560,padding:"12px 22px 44px",
+        display:"flex",flexDirection:"column",gap:14,
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
+        maxHeight:"85vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 0"}}/>
+
+        <div style={{display:"flex",justifyContent:"flex-end"}}>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:10,padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
+            <Icon d={Icons.x} size={16}/>
+          </button>
+        </div>
+
+        {/* Poster + title */}
+        <div style={{display:"flex",gap:14}}>
+          {movie.poster?(
+            <img src={movie.poster} alt="" style={{width:80,height:114,objectFit:"cover",
+              borderRadius:10,flexShrink:0,border:"1px solid rgba(255,255,255,0.08)"}}/>
+          ):(
+            <div style={{width:80,height:114,borderRadius:10,flexShrink:0,
+              background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`,
+              display:"flex",alignItems:"center",justifyContent:"center",padding:6,textAlign:"center"}}>
+              <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                fontFamily:"'Cormorant Garamond',serif"}}>{movie.title}</span>
+            </div>
+          )}
+          <div style={{minWidth:0,display:"flex",flexDirection:"column",gap:6}}>
+            <div>
+              <div style={{fontSize:18,fontWeight:700,color:"#F2F2F2",
+                fontFamily:"'Cormorant Garamond',serif",lineHeight:1.25}}>{movie.title}</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
+                {movie.year}{movie.season_number!=null?` · Season ${movie.season_number}`:""}
+                {" · "}{movie.media_type==="tv"?"TV Show":"Movie"}
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:20,
+                background:`${MOVIE_ACCENT}15`,border:`1px solid ${MOVIE_ACCENT}30`,color:MOVIE_ACCENT,
+                fontFamily:"'DM Sans',sans-serif"}}>
+                {statusMeta?.icon} {statusMeta?.label}
+              </span>
+            </div>
+            {movie.rating>0&&<StarRating value={movie.rating} readOnly size={16}/>}
+            {movie.watched_date&&(
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+                {movie.status==="watching"?"Started":"Watched"} {new Date(movie.watched_date+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* The comment/review — the whole point of this view */}
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:8}}>
+            {friend_review_label(movie)}
+          </p>
+          {movie.review?(
+            <p style={{fontSize:14,color:"rgba(255,255,255,0.75)",fontFamily:"'DM Sans',sans-serif",
+              lineHeight:1.6,background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",
+              borderRadius:14,padding:"14px 16px",margin:0}}>
+              {movie.review}
+            </p>
+          ):(
+            <p style={{fontSize:13,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
+              fontStyle:"italic",margin:0}}>
+              No comment left for this one.
+            </p>
           )}
         </div>
       </div>
     </div>,
     document.body
   );
+}
+function friend_review_label(movie){
+  return movie.media_type==="tv" && movie.season_number!=null
+    ? `Thoughts on Season ${movie.season_number}`
+    : "Thoughts";
 }
 
 // ─── PROFILE SETUP SCREEN ─────────────────────────────────────────────────────
@@ -3917,6 +4032,14 @@ function MoviesPage({ user }) {
                     fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
                 </div>
               )}
+              {/* Season tag — top left */}
+              {m.season_number!=null&&(
+                <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
+                  background:"rgba(0,0,0,0.65)",color:MOVIE_ACCENT,borderRadius:5,
+                  padding:"2px 5px",fontFamily:"'DM Sans',sans-serif"}}>
+                  S{m.season_number}
+                </div>
+              )}
               {/* Status corner tag */}
               {m.status!=="watched"&&(
                 <div style={{position:"absolute",top:5,right:5,fontSize:13,
@@ -3987,8 +4110,43 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
   const [review, setReview]   = useState(movie?.review||"");
   const [pickedFromSearch, setPickedFromSearch] = useState(!!movie);
 
+  // TV season tracking — a show is made of seasons, each logged as its own entry
+  const [showId, setShowId]         = useState(movie?.tmdb_id||null);
+  const [seasonNumber, setSeasonNumber] = useState(
+    movie?.season_number!=null ? movie.season_number : null
+  );
+  const [tvSeasons, setTvSeasons]   = useState([]);
+  const [loadingSeasons, setLoadingSeasons] = useState(false);
+  const [showSeasonList, setShowSeasonList] = useState(false);
+
   useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
   const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  const fetchSeasons = async(id)=>{
+    setLoadingSeasons(true);
+    try {
+      const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${TMDB_KEY}&language=en-US`);
+      const data = await res.json();
+      const seasons = (data.seasons||[])
+        .filter(s=>s.season_number>0) // skip "Specials" (season 0) clutter, still watchable via "Whole Series"
+        .map(s=>({
+          season_number: s.season_number,
+          name: s.name || `Season ${s.season_number}`,
+          poster: s.poster_path ? `https://image.tmdb.org/t/p/w300${s.poster_path}` : null,
+          episode_count: s.episode_count,
+          air_date: s.air_date,
+        }));
+      setTvSeasons(seasons);
+    } catch(e){ console.error("Season fetch failed:", e); setTvSeasons([]); }
+    setLoadingSeasons(false);
+  };
+
+  const pickSeason = (s)=>{
+    if(s===null) { setSeasonNumber(null); setShowSeasonList(false); return; }
+    setSeasonNumber(s.season_number);
+    if(s.poster) setPoster(s.poster);
+    setShowSeasonList(false);
+  };
 
   // TMDB (themoviedb.org) — the actual database Letterboxd itself runs on.
   // One call covers movies + TV together and is far more complete/reliable than
@@ -4017,6 +4175,7 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
           const title = isMovie ? r.title : r.name;
           const date  = isMovie ? r.release_date : r.first_air_date;
           return {
+            id: r.id, // TMDB id — needed to fetch a TV show's season list
             title,
             year: (date||"").slice(0,4),
             poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
@@ -4061,6 +4220,13 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
   const pick = (r)=>{
     setTitle(r.title); setPoster(r.poster); setYear(r.year);
     setMediaType(r.type); setResults([]); setPickedFromSearch(true);
+    setSeasonNumber(null); setTvSeasons([]); setShowSeasonList(false);
+    if(r.type==="tv" && r.id) {
+      setShowId(r.id);
+      fetchSeasons(r.id);
+    } else {
+      setShowId(null);
+    }
   };
 
   const save = async()=>{
@@ -4069,6 +4235,8 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
     await onSave({
       id: movie?.id || crypto.randomUUID(),
       title: title.trim(), poster, year, media_type: mediaType,
+      tmdb_id: mediaType==="tv" ? showId : null,
+      season_number: mediaType==="tv" ? seasonNumber : null,
       status, rating, watched_date: status==="want"?null:watchedDate,
       review: review.trim(), created_at: movie?.created_at || new Date().toISOString(),
     });
@@ -4177,6 +4345,84 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
             </button>
           ))}
         </div>
+
+        {/* Season picker — TV shows are tracked per-season, not as one blob */}
+        {mediaType==="tv"&&(
+          <div>
+            <label style={lbl}>Season</label>
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:12,
+              background:seasonNumber!=null?`${MOVIE_ACCENT}0C`:"rgba(255,255,255,0.04)",
+              border:`1px solid ${seasonNumber!=null?MOVIE_ACCENT+"25":"rgba(255,255,255,0.08)"}`}}>
+              <span style={{fontSize:13,fontWeight:seasonNumber!=null?700:400,
+                color:seasonNumber!=null?MOVIE_ACCENT:"rgba(255,255,255,0.4)",
+                fontFamily:"'DM Sans',sans-serif"}}>
+                {seasonNumber!=null ? `Season ${seasonNumber}` : "Whole series (no specific season)"}
+              </span>
+              {showId&&(
+                <button type="button" onClick={()=>{
+                  if(tvSeasons.length===0) fetchSeasons(showId);
+                  setShowSeasonList(v=>!v);
+                }} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",
+                  color:"rgba(255,255,255,0.4)",fontSize:11,fontWeight:600,textDecoration:"underline",
+                  fontFamily:"'DM Sans',sans-serif"}}>
+                  {seasonNumber!=null?"Change":"Pick a season"}
+                </button>
+              )}
+            </div>
+
+            {showSeasonList&&(
+              <div style={{marginTop:8,maxHeight:240,overflowY:"auto",display:"flex",flexDirection:"column",
+                gap:4,border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:6,
+                background:"rgba(255,255,255,0.02)"}}>
+                {loadingSeasons?(
+                  <div style={{padding:24,textAlign:"center"}}>
+                    <div style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.1)",
+                      borderTopColor:MOVIE_ACCENT,borderRadius:"50%",
+                      animation:"spin 0.7s linear infinite",margin:"0 auto"}}/>
+                  </div>
+                ):(
+                  <>
+                    <button type="button" onClick={()=>pickSeason(null)} style={{
+                      display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:9,
+                      border:"none",cursor:"pointer",textAlign:"left",
+                      background:seasonNumber==null?"rgba(255,255,255,0.06)":"transparent"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
+                      onMouseLeave={e=>e.currentTarget.style.background=seasonNumber==null?"rgba(255,255,255,0.06)":"transparent"}>
+                      <span style={{fontSize:13,fontWeight:600,color:"#F0F0F0",fontFamily:"'DM Sans',sans-serif"}}>
+                        Whole Series
+                      </span>
+                      <span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+                        (no specific season)
+                      </span>
+                    </button>
+                    {tvSeasons.map(s=>(
+                      <button key={s.season_number} type="button" onClick={()=>pickSeason(s)} style={{
+                        display:"flex",alignItems:"center",gap:10,padding:"6px 10px",borderRadius:9,
+                        border:"none",cursor:"pointer",textAlign:"left",
+                        background:seasonNumber===s.season_number?"rgba(255,255,255,0.08)":"transparent"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
+                        onMouseLeave={e=>e.currentTarget.style.background=seasonNumber===s.season_number?"rgba(255,255,255,0.08)":"transparent"}>
+                        {s.poster?(
+                          <img src={s.poster} alt="" style={{width:28,height:40,objectFit:"cover",
+                            borderRadius:5,flexShrink:0}}/>
+                        ):(
+                          <div style={{width:28,height:40,borderRadius:5,flexShrink:0,background:"rgba(255,255,255,0.06)"}}/>
+                        )}
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:"#F0F0F0",fontFamily:"'DM Sans',sans-serif",
+                            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+                          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+                            {s.episode_count?`${s.episode_count} episodes`:""}{s.air_date?` · ${s.air_date.slice(0,4)}`:""}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Status */}
         <div>
