@@ -3201,6 +3201,7 @@ function FriendProfileModal({ friend, onClose }) {
   const [movies, setMovies]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [selectedMovie, setSelectedMovie] = useState(null);
+  const [expandedShows, setExpandedShows] = useState({});
 
   const {avatar,color} = getCharacter(friend.name||"?");
 
@@ -3397,54 +3398,105 @@ function FriendProfileModal({ friend, onClose }) {
               </div>
             ):(
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-                {movies.map((m,i)=>(
-                  <button key={m.id} onClick={()=>setSelectedMovie(m)} style={{
-                    position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",padding:0,
-                    border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.03)",cursor:"pointer",
-                    animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
-                  }}>
-                    {m.poster?(
-                      <img src={m.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                    ):(
-                      <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
-                        justifyContent:"center",padding:8,textAlign:"center",
-                        background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
-                        <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",
-                          fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
-                      </div>
-                    )}
-                    {m.season_number!=null&&(
-                      <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
-                        background:"rgba(0,0,0,0.65)",color:MOVIE_ACCENT,borderRadius:5,
-                        padding:"2px 5px",fontFamily:"'DM Sans',sans-serif"}}>
-                        S{m.season_number}
-                      </div>
-                    )}
-                    {m.review&&(
-                      <div style={{position:"absolute",top:5,right:5,width:16,height:16,borderRadius:"50%",
-                        background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <Icon d={Icons.film} size={9} stroke={MOVIE_ACCENT}/>
-                      </div>
-                    )}
-                    {m.status!=="watched"&&(
-                      <div style={{position:"absolute",top:m.review?26:5,right:5,fontSize:12,
-                        background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"2px 4px"}}>
-                        {MOVIE_STATUSES.find(s=>s.id===m.status)?.icon}
-                      </div>
-                    )}
-                    {m.rating>0&&(
-                      <div style={{position:"absolute",bottom:0,left:0,right:0,
-                        background:"linear-gradient(to top,rgba(0,0,0,0.85),transparent)",
-                        padding:"14px 5px 5px",display:"flex",justifyContent:"center",gap:1}}>
-                        {[1,2,3,4,5].map(n=>(
-                          <Icon key={n} d={Icons.star} size={9}
-                            fill={n<=m.rating?MOVIE_ACCENT:"none"}
-                            stroke={n<=m.rating?MOVIE_ACCENT:"rgba(255,255,255,0.3)"}/>
-                        ))}
-                      </div>
-                    )}
-                  </button>
-                ))}
+                {buildMovieDisplayItems(movies, expandedShows).map((entry,i)=>{
+                  if(entry.kind==="stack"){
+                    const { key, seasons } = entry;
+                    const cover = seasons[seasons.length-1];
+                    const isOpen = !!expandedShows[key];
+                    return (
+                      <button key={key} onClick={()=>setExpandedShows(s=>({...s,[key]:!s[key]}))} style={{
+                        position:"relative",aspectRatio:"2/3",borderRadius:12,padding:0,cursor:"pointer",
+                        border:`1px solid ${isOpen?MOVIE_ACCENT+"50":"rgba(255,255,255,0.08)"}`,
+                        background:"transparent",overflow:"visible",
+                        animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
+                      }}>
+                        <div style={{position:"absolute",inset:0,transform:"translate(5px,5px)",
+                          borderRadius:12,background:"rgba(255,255,255,0.05)",
+                          border:"1px solid rgba(255,255,255,0.06)",zIndex:0}}/>
+                        <div style={{position:"absolute",inset:0,transform:"translate(2.5px,2.5px)",
+                          borderRadius:12,background:"rgba(255,255,255,0.06)",
+                          border:"1px solid rgba(255,255,255,0.07)",zIndex:1}}/>
+                        <div style={{position:"relative",zIndex:2,width:"100%",height:"100%",
+                          borderRadius:12,overflow:"hidden",background:"rgba(255,255,255,0.03)"}}>
+                          {cover.poster?(
+                            <img src={cover.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                          ):(
+                            <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
+                              justifyContent:"center",padding:8,textAlign:"center",
+                              background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
+                              <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                                fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{cover.title}</span>
+                            </div>
+                          )}
+                          <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
+                            background:"rgba(0,0,0,0.7)",color:MOVIE_ACCENT,borderRadius:5,
+                            padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",display:"flex",
+                            alignItems:"center",gap:3}}>
+                            <Icon d={Icons.film} size={9} stroke={MOVIE_ACCENT}/>
+                            {seasons.length} seasons
+                          </div>
+                          <div style={{position:"absolute",bottom:5,right:5,width:20,height:20,borderRadius:"50%",
+                            background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",
+                            transition:"transform 0.25s cubic-bezier(0.34,1.2,0.64,1)",
+                            transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>
+                            <Icon d={Icons.chevron} size={11} stroke="rgba(255,255,255,0.8)"/>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  }
+
+                  const m = entry.movie;
+                  return (
+                    <button key={m.id} onClick={()=>setSelectedMovie(m)} style={{
+                      position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",padding:0,
+                      border:`1px solid ${entry.isChild?MOVIE_ACCENT+"25":"rgba(255,255,255,0.08)"}`,
+                      background:"rgba(255,255,255,0.03)",cursor:"pointer",
+                      animation:`cardIn 0.35s cubic-bezier(0.34,1.2,0.64,1) both`,
+                    }}>
+                      {m.poster?(
+                        <img src={m.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                      ):(
+                        <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
+                          justifyContent:"center",padding:8,textAlign:"center",
+                          background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                            fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
+                        </div>
+                      )}
+                      {m.season_number!=null&&(
+                        <div style={{position:"absolute",top:5,left:5,fontSize:9.5,fontWeight:700,
+                          background:"rgba(0,0,0,0.65)",color:MOVIE_ACCENT,borderRadius:5,
+                          padding:"2px 5px",fontFamily:"'DM Sans',sans-serif"}}>
+                          S{m.season_number}
+                        </div>
+                      )}
+                      {m.review&&(
+                        <div style={{position:"absolute",top:5,right:5,width:16,height:16,borderRadius:"50%",
+                          background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <Icon d={Icons.film} size={9} stroke={MOVIE_ACCENT}/>
+                        </div>
+                      )}
+                      {m.status!=="watched"&&(
+                        <div style={{position:"absolute",top:m.review?26:5,right:5,fontSize:12,
+                          background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"2px 4px"}}>
+                          {MOVIE_STATUSES.find(s=>s.id===m.status)?.icon}
+                        </div>
+                      )}
+                      {m.rating>0&&(
+                        <div style={{position:"absolute",bottom:0,left:0,right:0,
+                          background:"linear-gradient(to top,rgba(0,0,0,0.85),transparent)",
+                          padding:"14px 5px 5px",display:"flex",justifyContent:"center",gap:1}}>
+                          {[1,2,3,4,5].map(n=>(
+                            <Icon key={n} d={Icons.star} size={9}
+                              fill={n<=m.rating?MOVIE_ACCENT:"none"}
+                              stroke={n<=m.rating?MOVIE_ACCENT:"rgba(255,255,255,0.3)"}/>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )
           )}
@@ -3923,6 +3975,35 @@ const MOVIE_STATUSES = [
   {id:"want",     label:"Want to Watch", icon:"🍿"},
 ];
 
+// Groups a movie list so multiple seasons of the same show bundle into one
+// "stack" entry — shared by both your own Movies tab and a friend's profile,
+// so the two views always behave identically.
+const showKeyOf = (m)=> m.tmdb_id ? `tv-${m.tmdb_id}` : `tv-title-${(m.title||"").toLowerCase()}`;
+function buildMovieDisplayItems(list, expandedShows={}) {
+  const groups = {};
+  const order = [];
+  const seenKeys = new Set();
+  list.forEach(m=>{
+    if(m.media_type==="tv"){
+      const key = showKeyOf(m);
+      if(!groups[key]) groups[key]=[];
+      groups[key].push(m);
+      if(!seenKeys.has(key)){ seenKeys.add(key); order.push({kind:"group",key}); }
+    } else {
+      order.push({kind:"single",movie:m});
+    }
+  });
+  const items = [];
+  order.forEach(entry=>{
+    if(entry.kind==="single"){ items.push({kind:"single",movie:entry.movie}); return; }
+    const seasons = [...groups[entry.key]].sort((a,b)=>(a.season_number||0)-(b.season_number||0));
+    if(seasons.length===1){ items.push({kind:"single",movie:seasons[0]}); return; }
+    items.push({kind:"stack",key:entry.key,seasons});
+    if(expandedShows[entry.key]) seasons.forEach(s=>items.push({kind:"single",movie:s,isChild:true}));
+  });
+  return items;
+}
+
 function MoviesPage({ user }) {
   const [movies, setMovies]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -3938,34 +4019,7 @@ function MoviesPage({ user }) {
   useEffect(()=>{ load(); },[]);
 
   const filtered = filter==="all" ? movies : movies.filter(m=>m.status===filter);
-
-  // Bundle multiple seasons of the same show into one stacked card. Movies, and
-  // shows you've only logged one season of, render as a normal single card.
-  const showKeyOf = (m)=> m.tmdb_id ? `tv-${m.tmdb_id}` : `tv-title-${(m.title||"").toLowerCase()}`;
-  const displayItems = (()=>{
-    const groups = {};
-    const order = [];
-    const seenKeys = new Set();
-    filtered.forEach(m=>{
-      if(m.media_type==="tv"){
-        const key = showKeyOf(m);
-        if(!groups[key]) groups[key]=[];
-        groups[key].push(m);
-        if(!seenKeys.has(key)){ seenKeys.add(key); order.push({kind:"group",key}); }
-      } else {
-        order.push({kind:"single",movie:m});
-      }
-    });
-    const items = [];
-    order.forEach(entry=>{
-      if(entry.kind==="single"){ items.push({kind:"single",movie:entry.movie}); return; }
-      const seasons = [...groups[entry.key]].sort((a,b)=>(a.season_number||0)-(b.season_number||0));
-      if(seasons.length===1){ items.push({kind:"single",movie:seasons[0]}); return; }
-      items.push({kind:"stack",key:entry.key,seasons});
-      if(expandedShows[entry.key]) seasons.forEach(s=>items.push({kind:"single",movie:s,isChild:true}));
-    });
-    return items;
-  })();
+  const displayItems = buildMovieDisplayItems(filtered, expandedShows);
 
   const watchedCount = movies.filter(m=>m.status==="watched").length;
   const thisYear = new Date().getFullYear();
@@ -5720,6 +5774,91 @@ function BottomNav({ tabs, activeTab, onSelect }) {
 }
 
 
+
+// ─── TUTORIAL MODAL — a quick tour of what the app can do ─────────────────────
+const TUTORIAL_SECTIONS = [
+  {icon:"⚔", color:"#A8FF78", title:"Quests",
+    text:"Create quests for anything you want to do. Add a photo, location, difficulty and category. Mark one Completed and it earns XP — harder difficulty means more XP. A photo is required to complete one, so you've always got proof."},
+  {icon:"🔒", color:"#78C1FF", title:"Public or Private",
+    text:"Every quest is private by default. Flip a quest to Public in the editor and it'll show up on your profile for friends to see — completely optional, per quest."},
+  {icon:"🗺", color:"#F472B6", title:"Boards",
+    text:"Create a shared Board and invite friends to build a quest list together. Everyone on the board can add, complete, and react to quests."},
+  {icon:"🤝", color:"#FBBF24", title:"Friends & Leaderboard",
+    text:"Add friends by email. Tap a friend to see their public quests, rank, and movie log. Check the Leaderboard tab to see who has the most XP or completed quests."},
+  {icon:"🎬", color:MOVIE_ACCENT, title:"Movies & Shows",
+    text:"Log everything you watch — search pulls real posters automatically. Rate it, write your thoughts, and track TV shows season by season instead of one big blob."},
+  {icon:"📸", color:"#C084FC", title:"Memories",
+    text:"A private day-by-day photo journal. Tap any date on the calendar to log what happened — you can add more than one moment per day."},
+  {icon:"🌍", color:"#2DD4BF", title:"Quest Map",
+    text:"Every quest with a location gets pinned on one map, so you can see everywhere your quests have taken you."},
+  {icon:"👤", color:"#F0F0F0", title:"Profile",
+    text:"Set your name, upload a real photo instead of your emoji avatar, and track your rank and XP progress ring."},
+  {icon:"✨", color:"#FBBF24", title:"Stuck for ideas?",
+    text:"Tap the sparkle button on the Quests tab any time for fresh, AI-generated quest suggestions."},
+];
+
+function TutorialModal({ onClose }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.8:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,display:"flex",alignItems:"flex-end",
+      justifyContent:"center",zIndex:9999,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
+        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
+        width:"100%",maxWidth:560,padding:"12px 22px 44px",
+        display:"flex",flexDirection:"column",gap:4,
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
+        maxHeight:"85vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",margin:"8px auto 12px"}}/>
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+          <div>
+            <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
+              Welcome to Side Quests
+            </h2>
+            <p style={{margin:"4px 0 0",fontSize:12.5,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
+              A quick tour of everything you can do here.
+            </p>
+          </div>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:10,padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)",flexShrink:0}}>
+            <Icon d={Icons.x} size={16}/>
+          </button>
+        </div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
+          {TUTORIAL_SECTIONS.map((s,i)=>(
+            <div key={i} style={{display:"flex",gap:12,padding:"12px 14px",borderRadius:14,
+              background:`${s.color}0A`,border:`1px solid ${s.color}22`}}>
+              <div style={{width:34,height:34,borderRadius:10,flexShrink:0,
+                background:`${s.color}18`,display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:16}}>{s.icon}</div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:s.color,
+                  fontFamily:"'DM Sans',sans-serif",marginBottom:3}}>{s.title}</div>
+                <div style={{fontSize:12.5,color:"rgba(255,255,255,0.55)",
+                  fontFamily:"'DM Sans',sans-serif",lineHeight:1.55}}>{s.text}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={close} style={{marginTop:16,padding:"14px",borderRadius:14,
+          background:"linear-gradient(135deg,#e8e8e8,#ffffff)",color:"#0A0A0C",border:"none",
+          cursor:"pointer",fontSize:14,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+          Got it
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode, setMode]       = useState("signin"); // signin | signup
@@ -5942,6 +6081,7 @@ export default function App(){
   const [shareQuest,setShareQuest]       = useState(null);
   const [showIdeas,setShowIdeas]         = useState(false);
   const [mounted,setMounted]     = useState(false);
+  const [showTutorial,setShowTutorial] = useState(false);
   const [syncing,setSyncing]     = useState(false);
 
   // Enables the CSS :active pseudo-class on tap for iOS Safari (otherwise it
@@ -6262,7 +6402,21 @@ export default function App(){
       <header style={{position:"sticky",top:0,zIndex:10,background:"rgba(8,8,10,0.85)",backdropFilter:"blur(24px)",borderBottom:"1px solid rgba(255,255,255,0.05)",padding:"44px 24px 0"}}>
         <div style={{maxWidth:560,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-            <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.16em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)"}}>Your Life</p>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.16em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",margin:0}}>Your Life</p>
+              {/* Subtle tutorial button — easy to miss on purpose, easy to find once you look */}
+              <button onClick={()=>setShowTutorial(true)} title="How this app works" style={{
+                width:16,height:16,borderRadius:"50%",border:"1px solid rgba(255,255,255,0.12)",
+                background:"rgba(255,255,255,0.02)",color:"rgba(255,255,255,0.22)",
+                fontSize:9,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",
+                display:"flex",alignItems:"center",justifyContent:"center",padding:0,
+                transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
+              }}
+                onMouseEnter={e=>{e.currentTarget.style.color="rgba(255,255,255,0.6)";e.currentTarget.style.borderColor="rgba(255,255,255,0.3)";}}
+                onMouseLeave={e=>{e.currentTarget.style.color="rgba(255,255,255,0.22)";e.currentTarget.style.borderColor="rgba(255,255,255,0.12)";}}>
+                ?
+              </button>
+            </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               {syncing&&(
                 <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:"rgba(255,212,120,0.7)",fontFamily:"'DM Sans',sans-serif"}}>
@@ -6680,6 +6834,7 @@ export default function App(){
         }}
         onClose={()=>setShowIdeas(false)}
       />}
+      {showTutorial&&<TutorialModal onClose={()=>setShowTutorial(false)}/>}
       {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
       {inviteBoard&&<InviteModal board={inviteBoard} user={user} friends={friends} onClose={()=>setInviteBoard(null)}/>}
       {memberModal&&<MemberModal member={memberModal} onSave={saveMember} onClose={()=>setMemberModal(null)}/>}
