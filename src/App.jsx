@@ -3225,8 +3225,20 @@ function FriendProfileModal({ friend, onClose }) {
   const completedCount = quests.filter(q=>q.status==="Completed").length;
   const activeCount = quests.filter(q=>q.status==="Active").length;
   const filteredQuests = quests.filter(q=>q.status===questFilter);
-  const ratedMovies = movies.filter(m=>m.rating>0);
-  const avgRating = ratedMovies.length ? (ratedMovies.reduce((s,m)=>s+m.rating,0)/ratedMovies.length).toFixed(1) : "—";
+
+  // Movie stats count each show once — 5 logged seasons of the same show is
+  // 1 "watched", not 5 — same fix as your own Movies tab.
+  const movieStatItems = buildMovieStatItems(movies);
+  const watchedCount  = movieStatItems.filter(it=>it.entries.some(m=>m.status==="watched")).length;
+  const watchingCount = movieStatItems.filter(it=>it.entries.some(m=>m.status==="watching")).length;
+  const wantCount      = movieStatItems.filter(it=>it.entries.some(m=>m.status==="want")).length;
+  const movieShowRatings = movieStatItems.map(it=>{
+    const rated = it.entries.filter(m=>m.rating>0);
+    return rated.length ? rated.reduce((s,m)=>s+m.rating,0)/rated.length : null;
+  }).filter(r=>r!=null);
+  const avgRating = movieShowRatings.length
+    ? (movieShowRatings.reduce((s,r)=>s+r,0)/movieShowRatings.length).toFixed(1)
+    : "—";
 
   // XP/rank computed from what's actually visible to us — their public completed quests
   const friendXP = calcXP(quests);
@@ -3283,17 +3295,32 @@ function FriendProfileModal({ friend, onClose }) {
             </div>
           </div>
 
-          {/* Stats */}
-          <div style={{display:"flex",gap:8,marginBottom:16}}>
+          {/* Quest stats */}
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
             {[
               {l:"Active",v:activeCount},
               {l:"Completed",v:completedCount},
-              {l:"Movies",v:movies.length},
-              {l:"Avg ★",v:avgRating},
             ].map(({l,v})=>(
               <div key={l} style={{flex:1,textAlign:"center",background:"rgba(255,255,255,0.03)",
                 border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"8px 4px"}}>
                 <div style={{fontSize:17,fontWeight:700,color:"#F0F0F0",
+                  fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
+                <div style={{fontSize:8.5,color:"rgba(255,255,255,0.3)",letterSpacing:"0.06em",
+                  marginTop:3,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          {/* Movie stats — each show counted once, split by status */}
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            {[
+              {l:"Watched",v:watchedCount},
+              {l:"Watching",v:watchingCount},
+              {l:"Want",v:wantCount},
+              {l:"Avg ★",v:avgRating},
+            ].map(({l,v})=>(
+              <div key={l} style={{flex:1,textAlign:"center",background:`${MOVIE_ACCENT}08`,
+                border:`1px solid ${MOVIE_ACCENT}20`,borderRadius:10,padding:"8px 4px"}}>
+                <div style={{fontSize:17,fontWeight:700,color:MOVIE_ACCENT,
                   fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
                 <div style={{fontSize:8.5,color:"rgba(255,255,255,0.3)",letterSpacing:"0.06em",
                   marginTop:3,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
