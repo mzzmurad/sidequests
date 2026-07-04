@@ -3407,7 +3407,7 @@ function FriendProfileModal({ friend, onClose }) {
                         position:"relative",aspectRatio:"2/3",borderRadius:12,padding:0,cursor:"pointer",
                         border:`1px solid ${isOpen?MOVIE_ACCENT+"50":"rgba(255,255,255,0.08)"}`,
                         background:"transparent",overflow:"visible",
-                        opacity:dimmed?0.3:1,filter:dimmed?"grayscale(0.6)":"none",
+                        opacity:dimmed?0.5:1,filter:dimmed?"blur(5px) grayscale(0.3)":"none",pointerEvents:dimmed?"none":"auto",
                         transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                         animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
                       }}>
@@ -3453,7 +3453,7 @@ function FriendProfileModal({ friend, onClose }) {
                       position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",padding:0,
                       border:`1px solid ${entry.isChild?MOVIE_ACCENT+"40":"rgba(255,255,255,0.08)"}`,
                       background:"rgba(255,255,255,0.03)",cursor:"pointer",
-                      opacity:entry.dimmed?0.3:1,filter:entry.dimmed?"grayscale(0.6)":"none",
+                      opacity:entry.dimmed?0.5:1,filter:entry.dimmed?"blur(5px) grayscale(0.3)":"none",pointerEvents:entry.dimmed?"none":"auto",
                       transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                       animation:`cardIn 0.35s cubic-bezier(0.34,1.2,0.64,1) both`,
                     }}>
@@ -4142,7 +4142,7 @@ function MoviesPage({ user }) {
                   position:"relative",aspectRatio:"2/3",borderRadius:12,padding:0,cursor:"pointer",
                   border:`1px solid ${isOpen?MOVIE_ACCENT+"50":"rgba(255,255,255,0.08)"}`,
                   background:"transparent",overflow:"visible",
-                  opacity:dimmed?0.3:1,filter:dimmed?"grayscale(0.6)":"none",
+                  opacity:dimmed?0.5:1,filter:dimmed?"blur(5px) grayscale(0.3)":"none",pointerEvents:dimmed?"none":"auto",
                   transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                   animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
                 }}>
@@ -4192,7 +4192,7 @@ function MoviesPage({ user }) {
                 border:`1px solid ${entry.isChild?MOVIE_ACCENT+"40":"rgba(255,255,255,0.08)"}`,
                 cursor:"pointer",padding:0,
                 background:"rgba(255,255,255,0.03)",
-                opacity:entry.dimmed?0.3:1,filter:entry.dimmed?"grayscale(0.6)":"none",
+                opacity:entry.dimmed?0.5:1,filter:entry.dimmed?"blur(5px) grayscale(0.3)":"none",pointerEvents:entry.dimmed?"none":"auto",
                 transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                 animation:`cardIn 0.35s cubic-bezier(0.34,1.2,0.64,1) both`,
               }}>
