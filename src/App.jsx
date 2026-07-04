@@ -4609,54 +4609,96 @@ function MemoriesPage({ user }) {
         </div>
       </div>
 
-      {/* Recent memories list */}
-      {memories.length>0&&(
-        <div>
-          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
-            color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
-            Recent Memories
-          </p>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {memories.slice(0,10).map(m=>(
-              <button key={m.id} onClick={()=>setSelected({date:m.date,memory:m})}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
-                  borderRadius:14,background:"rgba(255,255,255,0.025)",
-                  border:"1px solid rgba(192,132,252,0.2)",cursor:"pointer",textAlign:"left",
-                  transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}
-                onMouseEnter={e=>e.currentTarget.style.background="rgba(192,132,252,0.08)"}
-                onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.025)"}
-              >
-                {m.photo?(
-                  <img src={m.photo} alt="" style={{width:48,height:48,borderRadius:10,
-                    objectFit:"cover",flexShrink:0,border:"1px solid rgba(192,132,252,0.3)"}}/>
-                ):(
-                  <div style={{width:48,height:48,borderRadius:10,flexShrink:0,
-                    background:"rgba(192,132,252,0.1)",border:"1px solid rgba(192,132,252,0.2)",
-                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
-                    {m.emoji||"📸"}
-                  </div>
-                )}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0",
-                    fontFamily:"'Cormorant Garamond',serif",
-                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                    {m.title||"Memory"}
-                  </div>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",
-                    fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
-                    {new Date(m.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
-                  </div>
-                  {m.note&&<div style={{fontSize:11.5,color:"rgba(255,255,255,0.4)",
-                    fontFamily:"'DM Sans',sans-serif",marginTop:2,
-                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                    {m.note}
-                  </div>}
-                </div>
-              </button>
-            ))}
+      {/* This month's memories — grouped by day, same-day photos bundle into a stack */}
+      {(()=>{
+        const monthPrefix = `${year}-${String(month+1).padStart(2,"0")}`;
+        const monthMemories = memories.filter(m=>m.date.startsWith(monthPrefix));
+        const groups = {};
+        monthMemories.forEach(m=>{ (groups[m.date] = groups[m.date]||[]).push(m); });
+        const dayGroups = Object.entries(groups)
+          .sort((a,b)=>b[0].localeCompare(a[0]))
+          .map(([date,mems])=>({date,mems}));
+
+        if(dayGroups.length===0) return (
+          <div style={{textAlign:"center",padding:"30px 0"}}>
+            <p style={{fontSize:12,color:"rgba(255,255,255,0.15)",fontFamily:"'DM Sans',sans-serif"}}>
+              No memories logged in {monthName} yet.
+            </p>
           </div>
-        </div>
-      )}
+        );
+
+        return (
+          <div>
+            <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+              color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
+              {monthName} Memories
+            </p>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {dayGroups.map(({date,mems})=>{
+                const photos = mems.filter(m=>m.photo).map(m=>m.photo);
+                const primary = mems[0];
+                const multi = mems.length>1;
+                return (
+                  <button key={date} onClick={()=>setSelected({date,memories:mems})}
+                    style={{display:"flex",alignItems:"center",gap:16,padding:"12px 14px",
+                      borderRadius:14,background:"rgba(255,255,255,0.025)",
+                      border:"1px solid rgba(192,132,252,0.2)",cursor:"pointer",textAlign:"left",
+                      transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(192,132,252,0.08)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.025)"}
+                  >
+                    {/* Stacked photo thumbnails when a day has more than one memory */}
+                    <div style={{position:"relative",width:56,height:48,flexShrink:0}}>
+                      {photos.length>0?(
+                        photos.slice(0,3).map((p,idx)=>(
+                          <img key={idx} src={p} alt="" style={{
+                            position:"absolute",width:40,height:40,borderRadius:9,objectFit:"cover",
+                            border:"2px solid #0C0C0F",
+                            top:idx*3, left:idx*7,
+                            zIndex:3-idx,
+                            transform:`rotate(${(idx-1)*7}deg)`,
+                            boxShadow:"0 2px 6px rgba(0,0,0,0.4)",
+                          }}/>
+                        ))
+                      ):(
+                        <div style={{width:44,height:44,borderRadius:10,
+                          background:"rgba(192,132,252,0.1)",border:"1px solid rgba(192,132,252,0.2)",
+                          display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>
+                          {primary.emoji||"📸"}
+                        </div>
+                      )}
+                      {multi&&(
+                        <div style={{position:"absolute",bottom:-3,right:-3,zIndex:4,
+                          background:"#C084FC",color:"#0A0A0C",fontSize:9.5,fontWeight:700,
+                          borderRadius:9,padding:"1px 5px",border:"2px solid #0C0C0F",
+                          fontFamily:"'DM Sans',sans-serif"}}>
+                          {mems.length}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0",
+                        fontFamily:"'Cormorant Garamond',serif",
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {multi ? `${mems.length} moments` : (primary.title||"Memory")}
+                      </div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",
+                        fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
+                        {new Date(date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
+                      </div>
+                      {!multi&&primary.note&&<div style={{fontSize:11.5,color:"rgba(255,255,255,0.4)",
+                        fontFamily:"'DM Sans',sans-serif",marginTop:2,
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {primary.note}
+                      </div>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Day modal */}
       {selected&&(
