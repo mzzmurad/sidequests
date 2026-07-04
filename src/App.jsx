@@ -335,6 +335,15 @@ const sb = {
     await fetch(`${SUPABASE_URL}/rest/v1/movies?id=eq.${id}`, {method:"DELETE", headers:this.h});
   },
 
+  // ── Friend profile viewing ──────────────────────────────────────────────────
+  async getFriendPublicQuests(userId) {
+    // RLS already restricts this to quests marked public by an accepted friend —
+    // the is_public filter here is just a client-side belt-and-suspenders check
+    // so board-shared (but not explicitly public) quests never leak into this view.
+    const all = await this.getAll("quests", userId);
+    return Array.isArray(all) ? all.filter(q=>q.is_public===true) : [];
+  },
+
   // ── Boards ────────────────────────────────────────────────────────────────
   async getMyBoards(userId) {
     // Get boards where user is creator or member
@@ -476,7 +485,7 @@ const STATUS_META={
   "On Hold":{color:"#FFD478",glow:"rgba(255,212,120,0.25)",emoji:"⏸"},
   Abandoned:{color:"#FF7878",glow:"rgba(255,120,120,0.25)",emoji:"✗"},
 };
-const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null,color_index:null,category:null,difficulty:null};
+const EMPTY_QUEST={id:null,title:"",description:"",status:"Active",invitees:"",created_at:null,location:null,emoji:"",completed_at:null,photo:null,due_date:null,started_at:null,color_index:null,category:null,difficulty:null,is_public:false};
 const EMPTY_MEMBER={id:null,name:"",role:"",note:"",email:"",created_at:null};
 
 // ─── XP + RANK SYSTEM ────────────────────────────────────────────────────────
@@ -557,6 +566,7 @@ const Icons={
   chevronRight: "M9 18l6-6-6-6",
   star:    "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   film:    "M7 3v18M17 3v18M2 8h5M17 8h5M2 16h5M17 16h5M2 3h20a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z",
+  lock:    "M5 11h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM7 11V7a5 5 0 0 1 10 0v4",
 };
 
 // ─── PROGRESS RING (Apple-Fitness-style circular XP indicator) ───────────────
@@ -1393,9 +1403,18 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
             wordBreak:"break-word",overflowWrap:"break-word",
             whiteSpace:"normal",minWidth:0,
             textShadow:"0 1px 8px rgba(0,0,0,0.3)"}}>{quest.title}</h3>
-          {/* Category + Difficulty badges */}
-          {(quest.category||quest.difficulty)&&(
+          {/* Category + Difficulty + Public badges */}
+          {(quest.category||quest.difficulty||quest.is_public)&&(
             <div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
+              {quest.is_public&&(
+                <span style={{display:"inline-flex",alignItems:"center",gap:3,
+                  padding:"2px 8px",borderRadius:20,
+                  background:"rgba(168,255,120,0.12)",border:"1px solid rgba(168,255,120,0.3)",
+                  fontSize:10,fontWeight:700,color:"#A8FF78",
+                  fontFamily:"'DM Sans',sans-serif"}}>
+                  <Icon d={Icons.globe} size={10} stroke="#A8FF78"/> Public
+                </span>
+              )}
               {quest.category&&(()=>{
                 const cat=QUEST_CATEGORIES.find(c=>c.id===quest.category);
                 return cat?(
@@ -1793,6 +1812,34 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
           </div>
           <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"6px 0 0",fontFamily:"'DM Sans',sans-serif"}}>
             Tap a color to set it. Tap again to reset to auto.
+          </p>
+        </div>
+        <div>
+          <label style={lbl}>Visibility</label>
+          <div style={{display:"flex",gap:8}}>
+            <button type="button" onClick={()=>set("is_public",false)} style={{
+              flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+              padding:"11px 8px",borderRadius:12,border:"none",cursor:"pointer",
+              background:!form.is_public?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.04)",
+              outline:!form.is_public?"1px solid rgba(255,255,255,0.25)":"1px solid rgba(255,255,255,0.08)",
+              color:!form.is_public?"#fff":"rgba(255,255,255,0.35)",
+              fontSize:12.5,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+              <Icon d={Icons.lock} size={14} stroke="currentColor"/> Private
+            </button>
+            <button type="button" onClick={()=>set("is_public",true)} style={{
+              flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+              padding:"11px 8px",borderRadius:12,border:"none",cursor:"pointer",
+              background:form.is_public?"rgba(168,255,120,0.15)":"rgba(255,255,255,0.04)",
+              outline:form.is_public?"1px solid rgba(168,255,120,0.4)":"1px solid rgba(255,255,255,0.08)",
+              color:form.is_public?"#A8FF78":"rgba(255,255,255,0.35)",
+              fontSize:12.5,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+              <Icon d={Icons.globe} size={14} stroke="currentColor"/> Public to Friends
+            </button>
+          </div>
+          <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"6px 0 0",fontFamily:"'DM Sans',sans-serif"}}>
+            {form.is_public
+              ?"Friends can see this quest on your profile."
+              :"Only you can see this quest — the default."}
           </p>
         </div>
         <div><label style={lbl}>Location</label>
@@ -2671,6 +2718,7 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
   const [sending, setSending]   = useState(false);
   const [error, setError]       = useState("");
   const [success, setSuccess]   = useState("");
+  const [openFriend, setOpenFriend] = useState(null);
   const userXP = calcXP(quests);
 
   const load = async() => {
@@ -2822,9 +2870,9 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
               const {avatar,color}=getCharacter(f.name||"?");
               const friendQuests=quests.filter(q=>q.invitees&&q.invitees.toLowerCase().includes(f.name?.toLowerCase()));
               return(
-                <div key={f.id} style={{background:"rgba(255,255,255,0.03)",
-                  border:`1px solid ${color}25`,borderLeft:`3px solid ${color}`,
-                  borderRadius:14,padding:"14px 16px",
+                <button key={f.id} onClick={()=>setOpenFriend(f)} style={{background:"rgba(255,255,255,0.03)",
+                  border:`1px solid ${color}25`,borderLeft:`3px solid ${color}`,textAlign:"left",cursor:"pointer",
+                  borderRadius:14,padding:"14px 16px",width:"100%",
                   display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:44,height:44,borderRadius:12,flexShrink:0,
                     background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
@@ -2837,25 +2885,259 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
                       {f.email}
                     </div>
                     <div style={{fontSize:11,color:color,fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
-                      {friendQuests.length} shared quest{friendQuests.length!==1?"s":""}
+                      {friendQuests.length} shared quest{friendQuests.length!==1?"s":""} · tap to view profile
                     </div>
                   </div>
-                  <button onClick={async(e)=>{e.stopPropagation();if(!window.confirm(`Remove ${f.name} from friends?`))return;try{await sb.removeFriend(user.id,f.user_id);load();}catch(e){console.error(e);}}}
+                  <div onClick={async(e)=>{e.stopPropagation();if(!window.confirm(`Remove ${f.name} from friends?`))return;try{await sb.removeFriend(user.id,f.user_id);load();}catch(e){console.error(e);}}}
                     style={{background:"rgba(255,80,80,0.08)",border:"1px solid rgba(255,80,80,0.2)",
                       borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,120,120,0.7)",
                       display:"flex",alignItems:"center",flexShrink:0}}>
                     <Icon d={Icons.trash} size={13}/>
-                  </button>
-                </div>
+                  </div>
+                </button>
               );
             })}
           </div>
         </div>
       )}
+
+      {openFriend&&(
+        <FriendProfileModal friend={openFriend} onClose={()=>setOpenFriend(null)}/>
+      )}
     </div>
   );
 }
 
+
+
+// ─── FRIEND PROFILE MODAL — public quests + movie log, read-only ─────────────
+function FriendProfileModal({ friend, onClose }) {
+  const [visible, setVisible]   = useState(false);
+  const [tab, setTab]           = useState("quests"); // quests | movies
+  const [questFilter, setQuestFilter] = useState("Active");
+  const [quests, setQuests]     = useState([]);
+  const [movies, setMovies]     = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  const {avatar,color} = getCharacter(friend.name||"?");
+
+  useEffect(()=>{
+    requestAnimationFrame(()=>setVisible(true));
+    (async()=>{
+      setLoading(true);
+      try {
+        const [q,m] = await Promise.all([
+          sb.getFriendPublicQuests(friend.user_id),
+          sb.getMovies(friend.user_id),
+        ]);
+        setQuests(q); setMovies(m);
+      } catch(e){ console.error(e); }
+      setLoading(false);
+    })();
+  },[]);
+
+  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
+
+  const completedCount = quests.filter(q=>q.status==="Completed").length;
+  const activeCount = quests.filter(q=>q.status==="Active").length;
+  const filteredQuests = quests.filter(q=>q.status===questFilter);
+  const ratedMovies = movies.filter(m=>m.rating>0);
+  const avgRating = ratedMovies.length ? (ratedMovies.reduce((s,m)=>s+m.rating,0)/ratedMovies.length).toFixed(1) : "—";
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,zIndex:9998,background:`rgba(0,0,0,${visible?0.8:0})`,
+      backdropFilter:`blur(${visible?18:0}px)`,transition:"all 0.25s"}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+      <div style={{
+        position:"fixed",top:0,left:0,right:0,bottom:0,margin:"0 auto",maxWidth:560,
+        background:"linear-gradient(160deg,#111114,#0A0A0C)",
+        overflowY:"auto",WebkitOverflowScrolling:"touch",
+        transform:visible?"translateY(0)":"translateY(100%)",
+        transition:"transform 0.35s cubic-bezier(0.34,1.1,0.64,1)",
+      }}>
+        {/* Header */}
+        <div style={{position:"sticky",top:0,zIndex:2,background:"rgba(10,10,12,0.9)",
+          backdropFilter:"blur(20px)",borderBottom:"1px solid rgba(255,255,255,0.06)",
+          padding:"18px 20px 0"}}>
+          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",
+            border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"7px 10px",
+            cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",alignItems:"center",gap:6,
+            fontSize:12,fontFamily:"'DM Sans',sans-serif",marginBottom:16}}>
+            <Icon d={Icons.back} size={14}/> Back
+          </button>
+
+          <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
+            <div style={{width:60,height:60,borderRadius:16,flexShrink:0,
+              background:`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+              border:`2px solid ${color}50`,display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:30,boxShadow:`0 0 24px ${color}25`}}>{avatar}</div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:20,fontWeight:700,color:"#F2F2F2",
+                fontFamily:"'Cormorant Garamond',serif"}}>{friend.name}</div>
+              <div style={{fontSize:11,color,fontWeight:700,letterSpacing:"0.06em",
+                textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>{getTitle(friend.name||"?")}</div>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            {[
+              {l:"Active",v:activeCount},
+              {l:"Completed",v:completedCount},
+              {l:"Movies",v:movies.length},
+              {l:"Avg ★",v:avgRating},
+            ].map(({l,v})=>(
+              <div key={l} style={{flex:1,textAlign:"center",background:"rgba(255,255,255,0.03)",
+                border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"8px 4px"}}>
+                <div style={{fontSize:17,fontWeight:700,color:"#F0F0F0",
+                  fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{v}</div>
+                <div style={{fontSize:8.5,color:"rgba(255,255,255,0.3)",letterSpacing:"0.06em",
+                  marginTop:3,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tab switch */}
+          <div style={{display:"flex",gap:6,marginBottom:0}}>
+            {[{id:"quests",label:"Quests",icon:Icons.shield},{id:"movies",label:"Movies",icon:Icons.film}].map(t=>{
+              const active = tab===t.id;
+              return(
+                <button key={t.id} onClick={()=>setTab(t.id)} style={{
+                  flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                  padding:"10px 0",background:"none",border:"none",cursor:"pointer",
+                  borderBottom:`2px solid ${active?"rgba(255,255,255,0.6)":"transparent"}`,
+                  color:active?"#fff":"rgba(255,255,255,0.35)",
+                  fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>
+                  <Icon d={t.icon} size={14} stroke="currentColor"/> {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{padding:"18px 20px 60px"}}>
+          {loading?(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {[...Array(3)].map((_,i)=>(
+                <div key={i} style={{height:64,borderRadius:16,background:"rgba(255,255,255,0.04)",
+                  animation:"pulseDot 1.4s ease-in-out infinite",animationDelay:`${i*0.1}s`}}/>
+              ))}
+            </div>
+          ):tab==="quests"?(
+            <>
+              <div style={{display:"flex",gap:7,marginBottom:14}}>
+                {["Active","Completed"].map(s=>{
+                  const active=questFilter===s;
+                  const sColor = STATUS_META[s]?.color||"#A8FF78";
+                  return(
+                    <button key={s} onClick={()=>setQuestFilter(s)} style={{
+                      padding:"6px 14px",borderRadius:20,fontSize:11,fontWeight:600,
+                      cursor:"pointer",fontFamily:"'DM Sans',sans-serif",
+                      border:`1px solid ${active?sColor:"rgba(255,255,255,0.09)"}`,
+                      background:active?`${sColor}15`:"transparent",
+                      color:active?sColor:"rgba(255,255,255,0.3)",
+                      transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}>
+                      {s} {s==="Active"?activeCount:completedCount}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {filteredQuests.length===0?(
+                <div style={{textAlign:"center",padding:"50px 0"}}>
+                  <div style={{fontSize:36,marginBottom:10,opacity:0.15}}>🔒</div>
+                  <p style={{fontSize:13,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+                    No public {questFilter.toLowerCase()} quests to show.
+                  </p>
+                </div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {filteredQuests.map((q,i)=>{
+                    const palette = getPalette(q.id, q.color_index);
+                    return(
+                      <div key={q.id} style={{
+                        position:"relative",overflow:"hidden",borderRadius:16,
+                        background:`linear-gradient(135deg,${palette.color}16 0%,${palette.color}06 100%)`,
+                        border:`1px solid ${palette.color}25`,padding:"14px 16px",
+                        animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.04}s both`,
+                      }}>
+                        <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:palette.grad,opacity:0.6}}/>
+                        <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                          {q.emoji&&<span style={{fontSize:20,flexShrink:0}}>{q.emoji}</span>}
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:15,fontWeight:700,color:"#fff",
+                              fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3,wordBreak:"break-word"}}>
+                              {q.title}
+                            </div>
+                            {q.description&&<div style={{fontSize:12,color:"rgba(255,255,255,0.4)",
+                              fontFamily:"'DM Sans',sans-serif",marginTop:4,lineHeight:1.5}}>{q.description}</div>}
+                            {q.location?.name&&<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",
+                              fontFamily:"'DM Sans',sans-serif",marginTop:4}}>📍 {q.location.name}</div>}
+                          </div>
+                        </div>
+                        {q.photo&&<img src={q.photo} alt="" style={{width:"100%",height:140,objectFit:"cover",
+                          borderRadius:10,marginTop:10}}/>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ):(
+            movies.length===0?(
+              <div style={{textAlign:"center",padding:"50px 0"}}>
+                <div style={{fontSize:36,marginBottom:10,opacity:0.15}}>🎬</div>
+                <p style={{fontSize:13,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+                  Nothing logged yet.
+                </p>
+              </div>
+            ):(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+                {movies.map((m,i)=>(
+                  <div key={m.id} style={{
+                    position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",
+                    border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.03)",
+                    animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
+                  }}>
+                    {m.poster?(
+                      <img src={m.poster} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    ):(
+                      <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",
+                        justifyContent:"center",padding:8,textAlign:"center",
+                        background:`linear-gradient(160deg,${MOVIE_ACCENT}18,rgba(255,255,255,0.02))`}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",
+                          fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{m.title}</span>
+                      </div>
+                    )}
+                    {m.status!=="watched"&&(
+                      <div style={{position:"absolute",top:5,right:5,fontSize:12,
+                        background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"2px 4px"}}>
+                        {MOVIE_STATUSES.find(s=>s.id===m.status)?.icon}
+                      </div>
+                    )}
+                    {m.rating>0&&(
+                      <div style={{position:"absolute",bottom:0,left:0,right:0,
+                        background:"linear-gradient(to top,rgba(0,0,0,0.85),transparent)",
+                        padding:"14px 5px 5px",display:"flex",justifyContent:"center",gap:1}}>
+                        {[1,2,3,4,5].map(n=>(
+                          <Icon key={n} d={Icons.star} size={9}
+                            fill={n<=m.rating?MOVIE_ACCENT:"none"}
+                            stroke={n<=m.rating?MOVIE_ACCENT:"rgba(255,255,255,0.3)"}/>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 // ─── PROFILE SETUP SCREEN ─────────────────────────────────────────────────────
 function ProfileSetupScreen({ user, onDone }) {
