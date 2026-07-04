@@ -5495,6 +5495,7 @@ export default function App(){
   const [showCreateBoard,setShowCreateBoard] = useState(false);
   const [inviteCode,setInviteCode] = useState(null); // ?join=xxx from URL
   const [filter,setFilter]       = useState("All");
+  const [questSearch,setQuestSearch] = useState("");
   const [tab,setTab]             = useState("quests");
   const [questModal,setQuestModal]   = useState(null);
   const [memberModal,setMemberModal] = useState(null);
@@ -5702,7 +5703,15 @@ export default function App(){
   // Shared quests = quests that belong to any board the user is in
   const sharedQuests = quests.filter(q=>!!q.board_id);
   const scopedQuests = questScope==="personal" ? personalQuests : sharedQuests;
-  const filtered = filter==="All" ? scopedQuests : scopedQuests.filter(q=>q.status===filter);
+  const statusFiltered = filter==="All" ? scopedQuests : scopedQuests.filter(q=>q.status===filter);
+  const filtered = questSearch.trim()
+    ? statusFiltered.filter(q=>{
+        const q_ = questSearch.trim().toLowerCase();
+        return (q.title||"").toLowerCase().includes(q_)
+          || (q.description||"").toLowerCase().includes(q_)
+          || (q.location?.name||"").toLowerCase().includes(q_);
+      })
+    : statusFiltered;
   const counts=STATUSES.reduce((acc,s)=>({...acc,[s]:scopedQuests.filter(q=>q.status===s).length}),{});
   const completedCount=quests.filter(q=>q.status==="Completed").length;
 
@@ -5874,6 +5883,30 @@ export default function App(){
                   </button>
                 ))}
               </div>
+              {/* Search bar */}
+              <div style={{position:"relative",marginBottom:10}}>
+                <div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",
+                  pointerEvents:"none"}}>
+                  <Icon d={Icons.search} size={14} stroke="rgba(255,255,255,0.3)"/>
+                </div>
+                <input value={questSearch} onChange={e=>setQuestSearch(e.target.value)}
+                  placeholder={`Search ${questScope} quests…`}
+                  style={{width:"100%",background:"rgba(255,255,255,0.04)",
+                    border:`1px solid ${questSearch?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.08)"}`,
+                    borderRadius:11,padding:"9px 34px 9px 34px",color:"#F0F0F0",fontSize:13,outline:"none",
+                    fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",
+                    transition:"border-color 0.2s"}}
+                  onFocus={e=>e.target.style.borderColor="rgba(255,255,255,0.3)"}
+                  onBlur={e=>e.target.style.borderColor=questSearch?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.08)"}/>
+                {questSearch&&(
+                  <button onClick={()=>setQuestSearch("")} style={{position:"absolute",right:8,top:"50%",
+                    transform:"translateY(-50%)",background:"rgba(255,255,255,0.08)",border:"none",
+                    borderRadius:"50%",width:20,height:20,cursor:"pointer",color:"rgba(255,255,255,0.5)",
+                    display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Icon d={Icons.x} size={11}/>
+                  </button>
+                )}
+              </div>
               {/* Status filter pills */}
               <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:2}}>
                 {["All",...STATUSES].map(s=>{
@@ -5911,7 +5944,11 @@ export default function App(){
             ):filtered.length===0?(
               <div style={{textAlign:"center",padding:"80px 0",animation:"cardIn 0.5s ease both"}}>
                 <div style={{fontSize:48,marginBottom:16,opacity:0.12}}>⚔</div>
-                <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7}}>{filter==="All"?"No quests yet.\nBegin your journey.":`No ${filter} quests.`}</p>
+                <p style={{fontSize:15,color:"rgba(255,255,255,0.18)",lineHeight:1.7}}>
+                  {questSearch.trim()
+                    ? `No quests match "${questSearch.trim()}".`
+                    : filter==="All"?"No quests yet.\nBegin your journey.":`No ${filter} quests.`}
+                </p>
               </div>
             ):(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
