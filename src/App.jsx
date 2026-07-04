@@ -1499,6 +1499,29 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
       <div style={{maxHeight:expanded?900:0,overflow:"hidden",transition:"max-height 0.45s cubic-bezier(0.4,0,0.2,1)"}}>
         <div style={{padding:"0 18px 20px",display:"flex",flexDirection:"column",gap:16,
           borderTop:`1px solid ${palette.color}20`}}>
+          {/* XP value — always visible in the detail view, scales with difficulty */}
+          {(()=>{
+            const xpValue = XP_VALUES[quest.difficulty] || XP_VALUES.Completed;
+            const dMeta = DIFFICULTIES.find(d=>d.id===quest.difficulty);
+            const xpColor = dMeta?.color || "#A8FF78";
+            const isDone = quest.status==="Completed";
+            return(
+              <div style={{marginTop:14,display:"flex",alignItems:"center",gap:10,
+                padding:"12px 14px",borderRadius:12,
+                background:`${xpColor}10`,border:`1px solid ${xpColor}30`}}>
+                <span style={{fontSize:20}}>⚡</span>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:xpColor,fontFamily:"'Cormorant Garamond',serif"}}>
+                    {xpValue} XP
+                  </div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
+                    {isDone?"Earned on completion":"Earned when this quest is completed"}
+                    {dMeta&&` · ${dMeta.label} difficulty`}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {quest.emoji&&(
             <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
               borderRadius:12,background:`${palette.color}08`,border:`1px solid ${palette.color}18`}}>
@@ -1650,6 +1673,7 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
   const [form,setForm]=useState({...EMPTY_QUEST,...quest});
   const [visible,setVisible]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [saveError,setSaveError]=useState("");
   const titleRef=useRef(null);
   useEffect(()=>{
     requestAnimationFrame(()=>setVisible(true));
@@ -1664,6 +1688,12 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
 
   const handleSave=async()=>{
     if(!form.title.trim()) return;
+    setSaveError("");
+    // A quest can't be marked Completed without proof — a photo is required.
+    if(form.status==="Completed" && !form.photo) {
+      setSaveError("Add a photo before you can mark this quest as completed.");
+      return;
+    }
     setSaving(true);
     const now=new Date().toISOString();
     const wasCompleted=quest?.status==="Completed";
@@ -1792,6 +1822,28 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
               );
             })}
           </div>
+          {/* XP preview — updates live as difficulty changes */}
+          {(()=>{
+            const xpValue = XP_VALUES[form.difficulty] || XP_VALUES.Completed;
+            const dMeta = DIFFICULTIES.find(d=>d.id===form.difficulty);
+            const xpColor = dMeta?.color || "#A8FF78";
+            return(
+              <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8,
+                padding:"9px 14px",borderRadius:12,
+                background:`${xpColor}12`,border:`1px solid ${xpColor}30`}}>
+                <span style={{fontSize:15}}>⚡</span>
+                <span style={{fontSize:12.5,color:"rgba(255,255,255,0.6)",fontFamily:"'DM Sans',sans-serif"}}>
+                  This quest is worth
+                </span>
+                <span style={{fontSize:14,fontWeight:700,color:xpColor,fontFamily:"'DM Sans',sans-serif"}}>
+                  {xpValue} XP
+                </span>
+                <span style={{fontSize:12.5,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
+                  when completed
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         <div>
@@ -1905,7 +1957,14 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
         </div>
         {/* Photo upload — shown when status is Completed */}
         <div>
-          <label style={lbl}>Completion Photo {form.status!=="Completed"&&<span style={{opacity:0.4,fontWeight:400,textTransform:"none",fontSize:10}}>(mark as Completed first)</span>}</label>
+          <label style={lbl}>Completion Photo {form.status==="Completed"
+            ?<span style={{opacity:0.7,fontWeight:700,textTransform:"none",fontSize:10,color:"#FF9090"}}> · required</span>
+            :<span style={{opacity:0.4,fontWeight:400,textTransform:"none",fontSize:10}}>(mark as Completed first)</span>}</label>
+          {form.status==="Completed"&&!form.photo&&(
+            <p style={{fontSize:11,color:"rgba(255,144,144,0.7)",margin:"0 0 8px",fontFamily:"'DM Sans',sans-serif"}}>
+              You need a photo to prove it before this quest can be saved as completed.
+            </p>
+          )}
           {form.photo?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
               <img src={form.photo} alt="completion" style={{width:"100%",display:"block",maxHeight:160,objectFit:"cover"}}/>
@@ -1968,6 +2027,15 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
             </p>
           </div>
         </div>
+        {saveError&&(
+          <div style={{padding:"10px 14px",borderRadius:12,background:"rgba(255,100,100,0.08)",
+            border:"1px solid rgba(255,100,100,0.25)",display:"flex",alignItems:"center",gap:8}}>
+            <Icon d={Icons.camera} size={14} stroke="#FF9090"/>
+            <span style={{fontSize:12.5,color:"#FF9090",fontFamily:"'DM Sans',sans-serif",lineHeight:1.4}}>
+              {saveError}
+            </span>
+          </div>
+        )}
         <button onClick={handleSave} disabled={!form.title.trim()||saving} style={{
           background:form.title.trim()?"linear-gradient(135deg,#e8e8e8,#ffffff)":"rgba(255,255,255,0.08)",
           color:form.title.trim()?"#0A0A0C":"rgba(255,255,255,0.2)",border:"none",borderRadius:14,
