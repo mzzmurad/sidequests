@@ -411,8 +411,14 @@ const sb = {
     if(!r.ok) { console.error("getAll failed", table, r.status); return []; }
     return r.json();
   },
-  async upsert(table,obj) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{
+  async upsert(table,obj,onConflict) {
+    // onConflict lets a table upsert by a natural key (e.g. "user_id" for members)
+    // instead of the row's own id — this is what actually prevents duplicate rows
+    // when local state has a stale/missing id.
+    const url = onConflict
+      ? `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`
+      : `${SUPABASE_URL}/rest/v1/${table}`;
+    const r = await fetch(url,{
       method:"POST",headers:{...this.h,"Prefer":"resolution=merge-duplicates"},body:JSON.stringify(obj)
     }); if(!r.ok) throw new Error();
   },
@@ -2952,6 +2958,14 @@ function FriendProfileModal({ friend, onClose }) {
   const ratedMovies = movies.filter(m=>m.rating>0);
   const avgRating = ratedMovies.length ? (ratedMovies.reduce((s,m)=>s+m.rating,0)/ratedMovies.length).toFixed(1) : "—";
 
+  // XP/rank computed from what's actually visible to us — their public completed quests
+  const friendXP = calcXP(quests);
+  const friendRank = getRank(friendXP);
+  const friendNextRank = RANKS.find(r=>r.min>friendXP);
+  const friendPct = friendNextRank
+    ? Math.round(((friendXP-friendRank.min)/(friendNextRank.min-friendRank.min))*100)
+    : 100;
+
   return createPortal(
     <div style={{position:"fixed",inset:0,zIndex:9998,background:`rgba(0,0,0,${visible?0.8:0})`,
       backdropFilter:`blur(${visible?18:0}px)`,transition:"all 0.25s"}}
@@ -2975,17 +2989,27 @@ function FriendProfileModal({ friend, onClose }) {
           </button>
 
           <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-            <div style={{width:60,height:60,borderRadius:16,flexShrink:0,overflow:"hidden",
-              background:friend.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
-              border:`2px solid ${color}50`,display:"flex",alignItems:"center",
-              justifyContent:"center",fontSize:30,boxShadow:`0 0 24px ${color}25`}}>
-              {friend.photo?<img src={friend.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
-            </div>
+            <ProgressRing size={76} stroke={4} pct={friendPct} color={friendRank.color}>
+              <div style={{width:58,height:58,borderRadius:15,flexShrink:0,overflow:"hidden",
+                background:friend.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+                border:`2px solid ${color}50`,display:"flex",alignItems:"center",
+                justifyContent:"center",fontSize:28,boxShadow:`0 0 24px ${color}25`}}>
+                {friend.photo?<img src={friend.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+              </div>
+            </ProgressRing>
             <div style={{minWidth:0}}>
               <div style={{fontSize:20,fontWeight:700,color:"#F2F2F2",
                 fontFamily:"'Cormorant Garamond',serif"}}>{friend.name}</div>
               <div style={{fontSize:11,color,fontWeight:700,letterSpacing:"0.06em",
-                textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif"}}>{getTitle(friend.name||"?")}</div>
+                textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginBottom:4}}>{getTitle(friend.name||"?")}</div>
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:13}}>{friendRank.icon}</span>
+                <span style={{fontSize:12,fontWeight:700,color:friendRank.color,
+                  fontFamily:"'DM Sans',sans-serif"}}>{friendRank.name}</span>
+                <span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>
+                  · {friendXP} XP
+                </span>
+              </div>
             </div>
           </div>
 
@@ -3170,7 +3194,7 @@ function ProfileSetupScreen({ user, onDone }) {
         user_id: user.id,
         note: "Account owner",
         created_at: new Date().toISOString(),
-      });
+      }, "user_id");
       onDone(name.trim());
     } catch(e) {
       setError("Could not save. Try again.");
@@ -3302,7 +3326,7 @@ function ProfilePage({ user, quests, onSignOut, onNameChange, onPhotoChange }) {
         photo,
         note: "Account owner",
         created_at: memberCreatedAt || new Date().toISOString(),
-      });
+      }, "user_id");
       setSaved(true);
       onNameChange(name.trim());
       setTimeout(()=>setSaved(false),2500);
@@ -3329,7 +3353,7 @@ function ProfilePage({ user, quests, onSignOut, onNameChange, onPhotoChange }) {
           photo: dataUrl,
           note: "Account owner",
           created_at: memberCreatedAt || new Date().toISOString(),
-        });
+        }, "user_id");
         onPhotoChange&&onPhotoChange(dataUrl);
       } catch(e){ console.error(e); }
       setUploadingPhoto(false);
@@ -3349,7 +3373,7 @@ function ProfilePage({ user, quests, onSignOut, onNameChange, onPhotoChange }) {
         photo: null,
         note: "Account owner",
         created_at: memberCreatedAt || new Date().toISOString(),
-      });
+      }, "user_id");
       onPhotoChange&&onPhotoChange(null);
     } catch(e){ console.error(e); }
   };
@@ -5256,7 +5280,7 @@ export default function App(){
       // Update name from auth metadata if it changed
       if(existing.name !== authName && authName !== email.split("@")[0]) {
         const updated = {...existing, name:authName, display_name:authName};
-        try { await sb.upsert("members", updated); } catch{}
+        try { await sb.upsert("members", updated, "user_id"); } catch{}
         return existingMembers.map(m=>m.user_id===userId?updated:m);
       }
       return existingMembers;
@@ -5271,7 +5295,7 @@ export default function App(){
       note: "Account owner",
       created_at: new Date().toISOString(),
     };
-    try { await sb.upsert("members", member); } catch(e){ console.error(e); }
+    try { await sb.upsert("members", member, "user_id"); } catch(e){ console.error(e); }
     return [member, ...existingMembers];
   };
 
@@ -5337,7 +5361,7 @@ export default function App(){
     const withUser = {...m, user_id: user?.id};
     const next=members.find(x=>x.id===m.id)?members.map(x=>x.id===m.id?withUser:x):[withUser,...members];
     setMembers(next);setMemberModal(null);
-    try{await sb.upsert("members",withUser);}catch(e){console.error(e);}
+    try{await sb.upsert("members",withUser,"user_id");}catch(e){console.error(e);}
   };
   const deleteMember=async()=>{
     const next=members.filter(m=>m.id!==deleteTarget.id);
