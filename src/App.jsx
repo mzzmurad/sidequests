@@ -1873,10 +1873,12 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
                       background:invited?`${color}12`:"rgba(255,255,255,0.03)",
                       border:`1px solid ${invited?color+"40":"rgba(255,255,255,0.07)"}`,
                       transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}>
-                    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
-                      background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,overflow:"hidden",
+                      background:f.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
                       border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
-                      justifyContent:"center",fontSize:18}}>{avatar}</div>
+                      justifyContent:"center",fontSize:18}}>
+                      {f.photo?<img src={f.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                    </div>
                     <div style={{flex:1}}>
                       <div style={{fontSize:14,fontWeight:600,color:"#F0F0F0",
                         fontFamily:"'DM Sans',sans-serif"}}>{f.name}</div>
@@ -2586,10 +2588,12 @@ function BoardDetailPage({ board, user, members, allQuests, onBack, onSaveQuest,
                     padding:"8px 12px",borderRadius:12,
                     background:isMe?`${palette.color}08`:"rgba(255,255,255,0.03)",
                     border:`1px solid ${isMe?palette.color+"25":"rgba(255,255,255,0.06)"}`}}>
-                    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
-                      background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,overflow:"hidden",
+                      background:m.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
                       border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
-                      justifyContent:"center",fontSize:18}}>{avatar}</div>
+                      justifyContent:"center",fontSize:18}}>
+                      {m.photo?<img src={m.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                    </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:6}}>
                         <span style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
@@ -2789,10 +2793,12 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
                 <div key={req.id} style={{background:"rgba(255,212,120,0.06)",
                   border:"1px solid rgba(255,212,120,0.2)",borderRadius:14,
                   padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:40,height:40,borderRadius:11,flexShrink:0,
-                    background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                  <div style={{width:40,height:40,borderRadius:11,flexShrink:0,overflow:"hidden",
+                    background:req.profile?.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
                     border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
-                    justifyContent:"center",fontSize:20}}>{avatar}</div>
+                    justifyContent:"center",fontSize:20}}>
+                    {req.profile?.photo?<img src={req.profile.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                  </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
                       fontFamily:"'Cormorant Garamond',serif"}}>{req.profile?.name||"Unknown"}</div>
@@ -2874,10 +2880,12 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
                   border:`1px solid ${color}25`,borderLeft:`3px solid ${color}`,textAlign:"left",cursor:"pointer",
                   borderRadius:14,padding:"14px 16px",width:"100%",
                   display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:44,height:44,borderRadius:12,flexShrink:0,
-                    background:`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                  <div style={{width:44,height:44,borderRadius:12,flexShrink:0,overflow:"hidden",
+                    background:f.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
                     border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
-                    justifyContent:"center",fontSize:22}}>{avatar}</div>
+                    justifyContent:"center",fontSize:22}}>
+                    {f.photo?<img src={f.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                  </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:15,fontWeight:700,color:"#F0F0F0",
                       fontFamily:"'Cormorant Garamond',serif"}}>{f.name}</div>
@@ -2967,10 +2975,12 @@ function FriendProfileModal({ friend, onClose }) {
           </button>
 
           <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-            <div style={{width:60,height:60,borderRadius:16,flexShrink:0,
-              background:`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+            <div style={{width:60,height:60,borderRadius:16,flexShrink:0,overflow:"hidden",
+              background:friend.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
               border:`2px solid ${color}50`,display:"flex",alignItems:"center",
-              justifyContent:"center",fontSize:30,boxShadow:`0 0 24px ${color}25`}}>{avatar}</div>
+              justifyContent:"center",fontSize:30,boxShadow:`0 0 24px ${color}25`}}>
+              {friend.photo?<img src={friend.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+            </div>
             <div style={{minWidth:0}}>
               <div style={{fontSize:20,fontWeight:700,color:"#F2F2F2",
                 fontFamily:"'Cormorant Garamond',serif"}}>{friend.name}</div>
@@ -3251,11 +3261,15 @@ function ProfileSetupScreen({ user, onDone }) {
 
 
 // ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
-function ProfilePage({ user, quests, onSignOut, onNameChange }) {
+function ProfilePage({ user, quests, onSignOut, onNameChange, onPhotoChange }) {
   const [name, setName]       = useState("");
+  const [photo, setPhoto]     = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
   const [loading, setLoading] = useState(true);
+  const [memberId, setMemberId] = useState(null);
+  const [memberCreatedAt, setMemberCreatedAt] = useState(null);
 
   const userXP   = calcXP(quests);
   const userRank = getRank(userXP);
@@ -3267,24 +3281,27 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
       || localStorage.getItem("sq_name")
       || user.email?.split("@")[0]||"";
     setName(authName);
-    setLoading(false);
+    // Load own member record for photo + to know the row id when saving
+    sb.getAll("members", user.id).then(rows=>{
+      const me = Array.isArray(rows)?rows.find(m=>m.user_id===user.id):null;
+      if(me) { setPhoto(me.photo||null); setMemberId(me.id); setMemberCreatedAt(me.created_at); }
+      setLoading(false);
+    }).catch(()=>setLoading(false));
   },[]);
 
   const saveName = async() => {
     if(!name.trim()) return;
     setSaving(true);
     try {
-      // Get existing member record to preserve its ID
-      const existing = await sb.getAll("members", user.id);
-      const me = Array.isArray(existing)?existing.find(m=>m.user_id===user.id):null;
       await sb.upsert("members",{
-        id: me?.id || crypto.randomUUID(),
+        id: memberId || crypto.randomUUID(),
         name: name.trim(),
         display_name: name.trim(),
         email: user.email,
         user_id: user.id,
+        photo,
         note: "Account owner",
-        created_at: me?.created_at || new Date().toISOString(),
+        created_at: memberCreatedAt || new Date().toISOString(),
       });
       setSaved(true);
       onNameChange(name.trim());
@@ -3293,6 +3310,49 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
     setSaving(false);
   };
   const [error, setError] = useState("");
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if(!file) return;
+    setUploadingPhoto(true);
+    const reader = new FileReader();
+    reader.onload = async(ev) => {
+      const dataUrl = ev.target.result;
+      setPhoto(dataUrl);
+      try {
+        await sb.upsert("members",{
+          id: memberId || crypto.randomUUID(),
+          name: name.trim()||user.email?.split("@")[0]||"Adventurer",
+          display_name: name.trim()||user.email?.split("@")[0]||"Adventurer",
+          email: user.email,
+          user_id: user.id,
+          photo: dataUrl,
+          note: "Account owner",
+          created_at: memberCreatedAt || new Date().toISOString(),
+        });
+        onPhotoChange&&onPhotoChange(dataUrl);
+      } catch(e){ console.error(e); }
+      setUploadingPhoto(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = async() => {
+    setPhoto(null);
+    try {
+      await sb.upsert("members",{
+        id: memberId || crypto.randomUUID(),
+        name: name.trim()||user.email?.split("@")[0]||"Adventurer",
+        display_name: name.trim()||user.email?.split("@")[0]||"Adventurer",
+        email: user.email,
+        user_id: user.id,
+        photo: null,
+        note: "Account owner",
+        created_at: memberCreatedAt || new Date().toISOString(),
+      });
+      onPhotoChange&&onPhotoChange(null);
+    } catch(e){ console.error(e); }
+  };
 
   const preview = name.trim()||user.email?.split("@")[0]||"Adventurer";
   const {avatar,color} = getCharacter(preview);
@@ -3316,13 +3376,38 @@ function ProfilePage({ user, quests, onSignOut, onNameChange }) {
           background:`linear-gradient(90deg,transparent,${color}80,transparent)`}}/>
         <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
           <ProgressRing size={96} stroke={5} pct={pct} color={userRank.color}>
-            <div style={{width:76,height:76,borderRadius:20,
-              background:`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
-              border:`2px solid ${color}50`,display:"flex",alignItems:"center",
+            <label style={{width:76,height:76,borderRadius:20,cursor:"pointer",position:"relative",
+              background:photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+              border:`2px solid ${color}50`,display:"flex",alignItems:"center",overflow:"hidden",
               justifyContent:"center",fontSize:38,
-              boxShadow:`0 0 32px ${color}30`}}>{avatar}</div>
+              boxShadow:`0 0 32px ${color}30`}}>
+              {photo?(
+                <img src={photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              ):avatar}
+              {/* Camera badge — tap the avatar to upload/change your photo */}
+              <div style={{position:"absolute",bottom:-2,right:-2,width:26,height:26,borderRadius:9,
+                background:"rgba(10,10,12,0.95)",border:"2px solid #08080A",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                opacity:uploadingPhoto?0.5:1}}>
+                {uploadingPhoto?(
+                  <div style={{width:11,height:11,border:"2px solid rgba(255,255,255,0.15)",
+                    borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+                ):(
+                  <Icon d={Icons.camera} size={12} stroke="rgba(255,255,255,0.8)"/>
+                )}
+              </div>
+              <input type="file" accept="image/*" style={{display:"none"}}
+                disabled={uploadingPhoto} onChange={handlePhotoUpload}/>
+            </label>
           </ProgressRing>
         </div>
+        {photo&&(
+          <button onClick={removePhoto} style={{background:"none",border:"none",cursor:"pointer",
+            color:"rgba(255,120,120,0.6)",fontSize:11,fontFamily:"'DM Sans',sans-serif",
+            marginBottom:8,textDecoration:"underline"}}>
+            Remove photo
+          </button>
+        )}
         <div style={{fontSize:22,fontWeight:700,color:"#F2F2F2",
           fontFamily:"'Cormorant Garamond',serif",marginBottom:4}}>{preview}</div>
         <div style={{fontSize:11,color:color,fontWeight:700,letterSpacing:"0.08em",
@@ -5453,11 +5538,13 @@ export default function App(){
                 onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}
                 onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.04)"}
               >
-                <div style={{width:22,height:22,borderRadius:6,
-                  background:`radial-gradient(circle at 35% 35%,${getRank(calcXP(quests)).color}40,${getRank(calcXP(quests)).color}10)`,
+                <div style={{width:22,height:22,borderRadius:6,overflow:"hidden",
+                  background:members.find(m=>m.user_id===user?.id)?.photo?"transparent":`radial-gradient(circle at 35% 35%,${getRank(calcXP(quests)).color}40,${getRank(calcXP(quests)).color}10)`,
                   border:`1.5px solid ${getRank(calcXP(quests)).color}50`,
                   display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>
-                  {getCharacter(members.find(m=>m.user_id===user?.id)?.name||"?").avatar}
+                  {members.find(m=>m.user_id===user?.id)?.photo
+                    ? <img src={members.find(m=>m.user_id===user?.id).photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    : getCharacter(members.find(m=>m.user_id===user?.id)?.name||"?").avatar}
                 </div>
                 <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif",
                   maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
@@ -5719,6 +5806,10 @@ export default function App(){
             onNameChange={(n)=>{
               // Update members list with new name
               setMembers(prev=>prev.map(m=>m.user_id===user.id?{...m,name:n,display_name:n}:m));
+            }}
+            onPhotoChange={(p)=>{
+              // Update members list with new photo so header + everywhere else updates instantly
+              setMembers(prev=>prev.map(m=>m.user_id===user.id?{...m,photo:p}:m));
             }}
           />
         )}
