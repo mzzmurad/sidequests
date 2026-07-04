@@ -3201,7 +3201,7 @@ function FriendProfileModal({ friend, onClose }) {
   const [movies, setMovies]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [selectedMovie, setSelectedMovie] = useState(null);
-  const [expandedShows, setExpandedShows] = useState({});
+  const [expandedKey, setExpandedKey] = useState(null); // only one show stack open at a time
 
   const {avatar,color} = getCharacter(friend.name||"?");
 
@@ -3398,16 +3398,17 @@ function FriendProfileModal({ friend, onClose }) {
               </div>
             ):(
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-                {buildMovieDisplayItems(movies, expandedShows).map((entry,i)=>{
+                {buildMovieDisplayItems(movies, expandedKey).map((entry,i)=>{
                   if(entry.kind==="stack"){
-                    const { key, seasons } = entry;
+                    const { key, seasons, isOpen, dimmed } = entry;
                     const cover = seasons[seasons.length-1];
-                    const isOpen = !!expandedShows[key];
                     return (
-                      <button key={key} onClick={()=>setExpandedShows(s=>({...s,[key]:!s[key]}))} style={{
+                      <button key={key} onClick={()=>setExpandedKey(k=>k===key?null:key)} style={{
                         position:"relative",aspectRatio:"2/3",borderRadius:12,padding:0,cursor:"pointer",
                         border:`1px solid ${isOpen?MOVIE_ACCENT+"50":"rgba(255,255,255,0.08)"}`,
                         background:"transparent",overflow:"visible",
+                        opacity:dimmed?0.3:1,filter:dimmed?"grayscale(0.6)":"none",
+                        transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                         animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
                       }}>
                         <div style={{position:"absolute",inset:0,transform:"translate(5px,5px)",
@@ -3450,8 +3451,10 @@ function FriendProfileModal({ friend, onClose }) {
                   return (
                     <button key={m.id} onClick={()=>setSelectedMovie(m)} style={{
                       position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",padding:0,
-                      border:`1px solid ${entry.isChild?MOVIE_ACCENT+"25":"rgba(255,255,255,0.08)"}`,
+                      border:`1px solid ${entry.isChild?MOVIE_ACCENT+"40":"rgba(255,255,255,0.08)"}`,
                       background:"rgba(255,255,255,0.03)",cursor:"pointer",
+                      opacity:entry.dimmed?0.3:1,filter:entry.dimmed?"grayscale(0.6)":"none",
+                      transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                       animation:`cardIn 0.35s cubic-bezier(0.34,1.2,0.64,1) both`,
                     }}>
                       {m.poster?(
@@ -3979,7 +3982,11 @@ const MOVIE_STATUSES = [
 // "stack" entry — shared by both your own Movies tab and a friend's profile,
 // so the two views always behave identically.
 const showKeyOf = (m)=> m.tmdb_id ? `tv-${m.tmdb_id}` : `tv-title-${(m.title||"").toLowerCase()}`;
-function buildMovieDisplayItems(list, expandedShows={}) {
+
+// Only one show can be expanded at a time (expandedKey is a single string|null).
+// Everything that isn't part of the expanded show gets a `dimmed:true` flag so
+// the UI can grey it out and keep the revealed seasons visually isolated.
+function buildMovieDisplayItems(list, expandedKey=null) {
   const groups = {};
   const order = [];
   const seenKeys = new Set();
@@ -3995,12 +4002,32 @@ function buildMovieDisplayItems(list, expandedShows={}) {
   });
   const items = [];
   order.forEach(entry=>{
-    if(entry.kind==="single"){ items.push({kind:"single",movie:entry.movie}); return; }
+    const dimmed = expandedKey!=null && entry.key!==expandedKey && entry.kind==="group"
+      ? true
+      : (expandedKey!=null && entry.kind==="single" ? true : false);
+    if(entry.kind==="single"){ items.push({kind:"single",movie:entry.movie,dimmed}); return; }
     const seasons = [...groups[entry.key]].sort((a,b)=>(a.season_number||0)-(b.season_number||0));
-    if(seasons.length===1){ items.push({kind:"single",movie:seasons[0]}); return; }
-    items.push({kind:"stack",key:entry.key,seasons});
-    if(expandedShows[entry.key]) seasons.forEach(s=>items.push({kind:"single",movie:s,isChild:true}));
+    if(seasons.length===1){ items.push({kind:"single",movie:seasons[0],dimmed}); return; }
+    items.push({kind:"stack",key:entry.key,seasons,dimmed,isOpen:entry.key===expandedKey});
+    if(entry.key===expandedKey) seasons.forEach(s=>items.push({kind:"single",movie:s,isChild:true,dimmed:false}));
   });
+  return items;
+}
+
+// Dedupes stats so a show with 5 logged seasons counts once, not five times.
+function buildMovieStatItems(movies) {
+  const shows = {};
+  const items = [];
+  movies.forEach(m=>{
+    if(m.media_type==="tv"){
+      const key = showKeyOf(m);
+      if(!shows[key]) shows[key]=[];
+      shows[key].push(m);
+    } else {
+      items.push({ entries:[m] });
+    }
+  });
+  Object.values(shows).forEach(entries=>items.push({ entries }));
   return items;
 }
 
@@ -4009,7 +4036,7 @@ function MoviesPage({ user }) {
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState("all");
   const [editing, setEditing]     = useState(null); // movie object or "new" or null
-  const [expandedShows, setExpandedShows] = useState({}); // showKey -> bool, toggles the season stack open
+  const [expandedKey, setExpandedKey] = useState(null); // only one show stack open at a time
 
   const load = async()=>{
     setLoading(true);
@@ -4019,13 +4046,20 @@ function MoviesPage({ user }) {
   useEffect(()=>{ load(); },[]);
 
   const filtered = filter==="all" ? movies : movies.filter(m=>m.status===filter);
-  const displayItems = buildMovieDisplayItems(filtered, expandedShows);
+  const displayItems = buildMovieDisplayItems(filtered, expandedKey);
 
-  const watchedCount = movies.filter(m=>m.status==="watched").length;
+  // Stats count each show once — 5 logged seasons of the same show is 1 "watched", not 5.
+  const statItems = buildMovieStatItems(movies);
   const thisYear = new Date().getFullYear();
-  const thisYearCount = movies.filter(m=>m.status==="watched" && m.watched_date && new Date(m.watched_date).getFullYear()===thisYear).length;
-  const rated = movies.filter(m=>m.rating>0);
-  const avgRating = rated.length ? (rated.reduce((s,m)=>s+m.rating,0)/rated.length).toFixed(1) : "—";
+  const watchedCount = statItems.filter(it=>it.entries.some(m=>m.status==="watched")).length;
+  const thisYearCount = statItems.filter(it=>
+    it.entries.some(m=>m.status==="watched" && m.watched_date && new Date(m.watched_date).getFullYear()===thisYear)
+  ).length;
+  const showRatings = statItems.map(it=>{
+    const rated = it.entries.filter(m=>m.rating>0);
+    return rated.length ? rated.reduce((s,m)=>s+m.rating,0)/rated.length : null;
+  }).filter(r=>r!=null);
+  const avgRating = showRatings.length ? (showRatings.reduce((s,r)=>s+r,0)/showRatings.length).toFixed(1) : "—";
 
   const handleSave = async(movie)=>{
     await sb.upsertMovie({...movie, user_id:user.id});
@@ -4101,14 +4135,15 @@ function MoviesPage({ user }) {
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
           {displayItems.map((entry,i)=>{
             if(entry.kind==="stack"){
-              const { key, seasons } = entry;
+              const { key, seasons, isOpen, dimmed } = entry;
               const cover = seasons[seasons.length-1]; // most recent season's poster as the face card
-              const isOpen = !!expandedShows[key];
               return (
-                <button key={key} onClick={()=>setExpandedShows(s=>({...s,[key]:!s[key]}))} style={{
+                <button key={key} onClick={()=>setExpandedKey(k=>k===key?null:key)} style={{
                   position:"relative",aspectRatio:"2/3",borderRadius:12,padding:0,cursor:"pointer",
                   border:`1px solid ${isOpen?MOVIE_ACCENT+"50":"rgba(255,255,255,0.08)"}`,
                   background:"transparent",overflow:"visible",
+                  opacity:dimmed?0.3:1,filter:dimmed?"grayscale(0.6)":"none",
+                  transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                   animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${i*0.03}s both`,
                 }}>
                   {/* Stacked card edges peeking out behind the face card */}
@@ -4154,9 +4189,11 @@ function MoviesPage({ user }) {
             return (
               <button key={m.id} onClick={()=>setEditing(m)} style={{
                 position:"relative",aspectRatio:"2/3",borderRadius:12,overflow:"hidden",
-                border:`1px solid ${entry.isChild?MOVIE_ACCENT+"25":"rgba(255,255,255,0.08)"}`,
+                border:`1px solid ${entry.isChild?MOVIE_ACCENT+"40":"rgba(255,255,255,0.08)"}`,
                 cursor:"pointer",padding:0,
                 background:"rgba(255,255,255,0.03)",
+                opacity:entry.dimmed?0.3:1,filter:entry.dimmed?"grayscale(0.6)":"none",
+                transition:"opacity 0.3s cubic-bezier(0.34,1.2,0.64,1), filter 0.3s ease",
                 animation:`cardIn 0.35s cubic-bezier(0.34,1.2,0.64,1) both`,
               }}>
                 {m.poster?(
