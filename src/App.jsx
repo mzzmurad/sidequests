@@ -2719,7 +2719,7 @@ function RankBadge({ xp, size="sm" }) {
 }
 
 // ─── FRIENDS PAGE ─────────────────────────────────────────────────────────────
-function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
+function FriendsPage({ user, quests, members=[], onAddToQuest, onFriendsLoaded }) {
   const [friends, setFriends]   = useState([]);
   const [pending, setPending]   = useState([]);
   const [incoming, setIncoming] = useState([]);
@@ -2729,6 +2729,7 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
   const [error, setError]       = useState("");
   const [success, setSuccess]   = useState("");
   const [openFriend, setOpenFriend] = useState(null);
+  const [view, setView]         = useState("friends"); // friends | leaderboard
   const userXP = calcXP(quests);
 
   const load = async() => {
@@ -2784,6 +2785,27 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
         {/* Rank card */}
         <RankBadge xp={userXP} size="lg"/>
       </div>
+
+      {/* Friends / Leaderboard toggle */}
+      <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:12,
+        padding:4,gap:4,marginBottom:20}}>
+        {[{id:"friends",label:"Friends"},{id:"leaderboard",label:"Leaderboard"}].map(v=>(
+          <button key={v.id} onClick={()=>setView(v.id)} style={{
+            flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",
+            background:view===v.id?"rgba(255,255,255,0.1)":"transparent",
+            color:view===v.id?"#F0F0F0":"rgba(255,255,255,0.35)",
+            fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif",
+            transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {view==="leaderboard"&&(
+        <LeaderboardView user={user} friends={friends} quests={quests} members={members}/>
+      )}
+
+      {view==="friends"&&(<>
 
       {/* Incoming requests */}
       {incoming.length>0&&(
@@ -2915,6 +2937,8 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
         </div>
       )}
 
+      </>)}
+
       {openFriend&&(
         <FriendProfileModal friend={openFriend} onClose={()=>setOpenFriend(null)}/>
       )}
@@ -2923,6 +2947,182 @@ function FriendsPage({ user, quests, onAddToQuest, onFriendsLoaded }) {
 }
 
 
+
+
+// ─── LEADERBOARD ──────────────────────────────────────────────────────────────
+// Ranked fairly: everyone (including you) is scored only on PUBLIC quests, since
+// that's the one dataset every person in the comparison actually has access to.
+function LeaderboardView({ user, friends, quests, members }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [metric, setMetric]   = useState("xp"); // xp | completed
+
+  useEffect(()=>{
+    let cancelled = false;
+    (async()=>{
+      setLoading(true);
+      try {
+        const friendPublicQuests = await Promise.all(
+          friends.map(f=>sb.getFriendPublicQuests(f.user_id).catch(()=>[]))
+        );
+        if(cancelled) return;
+
+        const me = members.find(m=>m.user_id===user.id);
+        const myName = sb.getUser()?.name || localStorage.getItem("sq_name") || me?.name || user.email?.split("@")[0] || "You";
+        const myPublicQuests = quests.filter(q=>q.is_public===true);
+
+        const buildEntry = (id, name, photo, questList, isMe) => {
+          const xp = calcXP(questList);
+          const completedCount = questList.filter(q=>q.status==="Completed").length;
+          return { id, name, photo, isMe, xp, completedCount, rank: getRank(xp) };
+        };
+
+        const list = [
+          buildEntry(user.id, myName, me?.photo||null, myPublicQuests, true),
+          ...friends.map((f,i)=>buildEntry(f.user_id, f.name, f.photo||null, friendPublicQuests[i]||[], false)),
+        ];
+
+        if(!cancelled) setEntries(list);
+      } catch(e){ console.error(e); }
+      if(!cancelled) setLoading(false);
+    })();
+    return ()=>{ cancelled=true; };
+  },[friends.length]);
+
+  const sorted = [...entries].sort((a,b)=>
+    metric==="xp" ? b.xp-a.xp : b.completedCount-a.completedCount
+  );
+  const top3 = sorted.slice(0,3);
+  const rest = sorted.slice(3);
+  const podiumOrder = top3.length===3 ? [top3[1],top3[0],top3[2]] : top3; // silver, gold, bronze visual order
+
+  const medalColor = (place)=>place===0?"#FBBF24":place===1?"#D1D5DB":"#CD7F32";
+  const value = (e)=>metric==="xp"?e.xp:e.completedCount;
+  const label = metric==="xp"?"XP":"Completed";
+
+  return (
+    <div>
+      <p style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",
+        lineHeight:1.6,marginBottom:14}}>
+        Ranked on public quests only — the one dataset everyone here can fairly see.
+      </p>
+
+      {/* Metric switch */}
+      <div style={{display:"flex",gap:7,marginBottom:20}}>
+        {[{id:"xp",label:"Most XP"},{id:"completed",label:"Most Completed"}].map(m=>{
+          const active = metric===m.id;
+          return(
+            <button key={m.id} onClick={()=>setMetric(m.id)} style={{
+              padding:"7px 14px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer",
+              fontFamily:"'DM Sans',sans-serif",
+              border:`1px solid ${active?"#A8FF78":"rgba(255,255,255,0.09)"}`,
+              background:active?"rgba(168,255,120,0.12)":"transparent",
+              color:active?"#A8FF78":"rgba(255,255,255,0.35)",
+              transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
+            }}>{m.label}</button>
+          );
+        })}
+      </div>
+
+      {loading?(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {[...Array(4)].map((_,i)=>(
+            <div key={i} style={{height:60,borderRadius:14,background:"rgba(255,255,255,0.04)",
+              animation:"pulseDot 1.4s ease-in-out infinite",animationDelay:`${i*0.1}s`}}/>
+          ))}
+        </div>
+      ):entries.length<=1?(
+        <div style={{textAlign:"center",padding:"50px 0"}}>
+          <div style={{fontSize:36,marginBottom:10,opacity:0.15}}>🏆</div>
+          <p style={{fontSize:13,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}>
+            Add some friends to start a leaderboard.
+          </p>
+        </div>
+      ):(
+        <>
+          {/* Podium — top 3 */}
+          <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:20,padding:"0 4px"}}>
+            {podiumOrder.map((e)=>{
+              const place = top3.indexOf(e); // 0=gold,1=silver,2=bronze
+              const isFirst = place===0;
+              const {avatar,color} = getCharacter(e.name||"?");
+              const mColor = medalColor(place);
+              return(
+                <div key={e.id} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
+                  order: place===0?2:place===1?1:3}}>
+                  <div style={{fontSize:isFirst?20:15,marginBottom:4}}>
+                    {place===0?"👑":place===1?"🥈":"🥉"}
+                  </div>
+                  <div style={{width:isFirst?60:48,height:isFirst?60:48,borderRadius:isFirst?18:14,
+                    overflow:"hidden",flexShrink:0,marginBottom:8,
+                    background:e.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+                    border:`2.5px solid ${mColor}`,display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:isFirst?28:22,boxShadow:`0 0 20px ${mColor}50`}}>
+                    {e.photo?<img src={e.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                  </div>
+                  <div style={{fontSize:isFirst?13:12,fontWeight:700,color:"#F0F0F0",
+                    fontFamily:"'Cormorant Garamond',serif",textAlign:"center",
+                    whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>
+                    {e.isMe?"You":e.name}
+                  </div>
+                  <div style={{fontSize:isFirst?15:13,fontWeight:700,color:mColor,
+                    fontFamily:"'Cormorant Garamond',serif",marginTop:2}}>
+                    {value(e)}
+                  </div>
+                  <div style={{width:"100%",height:isFirst?54:36,borderRadius:"10px 10px 0 0",
+                    background:`linear-gradient(180deg,${mColor}30,${mColor}08)`,
+                    border:`1px solid ${mColor}30`,borderBottom:"none",marginTop:8}}/>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Rest of the list */}
+          {rest.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {rest.map((e,i)=>{
+                const {avatar,color} = getCharacter(e.name||"?");
+                return(
+                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:12,
+                    padding:"11px 14px",borderRadius:14,
+                    background:e.isMe?"rgba(168,255,120,0.06)":"rgba(255,255,255,0.03)",
+                    border:`1px solid ${e.isMe?"rgba(168,255,120,0.25)":"rgba(255,255,255,0.07)"}`}}>
+                    <div style={{width:22,textAlign:"center",fontSize:13,fontWeight:700,
+                      color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>
+                      {i+4}
+                    </div>
+                    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,overflow:"hidden",
+                      background:e.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}30,${color}08)`,
+                      border:`1.5px solid ${color}40`,display:"flex",alignItems:"center",
+                      justifyContent:"center",fontSize:18}}>
+                      {e.photo?<img src={e.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",
+                        fontFamily:"'Cormorant Garamond',serif",display:"flex",alignItems:"center",gap:6}}>
+                        {e.isMe?"You":e.name}
+                        <span style={{fontSize:12}}>{e.rank.icon}</span>
+                      </div>
+                      <div style={{fontSize:10.5,color:e.rank.color,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
+                        {e.rank.name}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:16,fontWeight:700,color:"#F0F0F0",
+                        fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{value(e)}</div>
+                      <div style={{fontSize:8.5,color:"rgba(255,255,255,0.25)",letterSpacing:"0.06em",
+                        marginTop:2,fontFamily:"'DM Sans',sans-serif",textTransform:"uppercase"}}>{label}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 // ─── FRIEND PROFILE MODAL — public quests + movie log, read-only ─────────────
 function FriendProfileModal({ friend, onClose }) {
@@ -5806,7 +6006,7 @@ export default function App(){
         )}
 
         {tab==="friends"&&(
-          <FriendsPage user={user} quests={quests} onFriendsLoaded={f=>setFriends(f)}/>
+          <FriendsPage user={user} quests={quests} members={members} onFriendsLoaded={f=>setFriends(f)}/>
         )}
 
         {tab==="memories"&&(
