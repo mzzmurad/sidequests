@@ -4731,6 +4731,7 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
   const [view, setView]     = useState("list");
   const [editing, setEditing] = useState(null);
   const [visible, setVisible] = useState(false);
+  const [expandedPhoto, setExpandedPhoto] = useState(null); // memory whose photo is shown full-size
 
   useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
   const close=()=>{ setVisible(false); setTimeout(onClose,250); };
@@ -4782,7 +4783,17 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
             {dayMemories.map(m=>(
               <div key={m.id} style={{background:"rgba(192,132,252,0.06)",
                 border:"1px solid rgba(192,132,252,0.15)",borderRadius:14,overflow:"hidden"}}>
-                {m.photo&&<img src={m.photo} alt="" style={{width:"100%",height:140,objectFit:"cover",display:"block"}}/>}
+                {m.photo&&(
+                  <button onClick={()=>setExpandedPhoto(m)} style={{
+                    width:"100%",height:140,padding:0,border:"none",cursor:"zoom-in",
+                    display:"block",position:"relative"}}>
+                    <img src={m.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    <div style={{position:"absolute",bottom:6,right:6,background:"rgba(0,0,0,0.55)",
+                      borderRadius:7,padding:"3px 6px",display:"flex",alignItems:"center",gap:3}}>
+                      <Icon d={Icons.search} size={10} stroke="rgba(255,255,255,0.8)"/>
+                    </div>
+                  </button>
+                )}
                 <div style={{padding:"12px 14px",display:"flex",alignItems:"flex-start",gap:10}}>
                   {m.emoji&&<span style={{fontSize:20,flexShrink:0}}>{m.emoji}</span>}
                   <div style={{flex:1,minWidth:0}}>
@@ -4817,6 +4828,61 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
             onSave={async(mem)=>{ await onSave(mem); setView("list"); }}
           />
         )}
+      </div>
+
+      {expandedPhoto&&(
+        <MemoryPhotoLightbox memory={expandedPhoto} onClose={()=>setExpandedPhoto(null)}/>
+      )}
+    </div>,
+    document.body
+  );
+}
+
+// ─── MEMORY PHOTO LIGHTBOX — full uncropped photo + title/description ────────
+function MemoryPhotoLightbox({ memory, onClose }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,200); };
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,zIndex:10001,
+      background:`rgba(4,4,6,${visible?0.96:0})`,backdropFilter:`blur(${visible?10:0}px)`,
+      display:"flex",flexDirection:"column",transition:"all 0.25s",
+      opacity:visible?1:0}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+
+      <div style={{display:"flex",justifyContent:"flex-end",padding:"20px 20px 0",flexShrink:0}}>
+        <button onClick={close} style={{background:"rgba(255,255,255,0.08)",
+          border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"8px 9px",
+          cursor:"pointer",color:"rgba(255,255,255,0.7)"}}>
+          <Icon d={Icons.x} size={17}/>
+        </button>
+      </div>
+
+      {/* Full, uncropped image */}
+      <div style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",
+        padding:"8px 16px",overflow:"hidden"}}
+        onClick={e=>e.target===e.currentTarget&&close()}>
+        <img src={memory.photo} alt="" style={{
+          maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12,
+          boxShadow:"0 12px 48px rgba(0,0,0,0.6)",
+          transform:visible?"scale(1)":"scale(0.94)",transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)"}}/>
+      </div>
+
+      {/* Title + description */}
+      <div style={{flexShrink:0,padding:"16px 22px calc(env(safe-area-inset-bottom,0px) + 22px)",
+        display:"flex",alignItems:"flex-start",gap:10}}>
+        {memory.emoji&&<span style={{fontSize:22,flexShrink:0}}>{memory.emoji}</span>}
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:17,fontWeight:700,color:"#F2F2F2",
+            fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>
+            {memory.title||"Moment"}
+          </div>
+          {memory.note&&<div style={{fontSize:13.5,color:"rgba(255,255,255,0.55)",
+            fontFamily:"'DM Sans',sans-serif",marginTop:4,lineHeight:1.6}}>
+            {memory.note}
+          </div>}
+        </div>
       </div>
     </div>,
     document.body
