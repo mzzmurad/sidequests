@@ -335,6 +335,21 @@ const sb = {
     await fetch(`${SUPABASE_URL}/rest/v1/movies?id=eq.${id}`, {method:"DELETE", headers:this.h});
   },
 
+  // ── Quest Steps (progression) ───────────────────────────────────────────────
+  async getQuestSteps(questId) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/quest_steps?quest_id=eq.${questId}&order=order_index.asc`, {headers:this.h});
+    const d = await r.json(); return Array.isArray(d)?d:[];
+  },
+  async upsertQuestStep(step) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/quest_steps`, {
+      method:"POST", headers:{...this.h,"Prefer":"resolution=merge-duplicates"},
+      body:JSON.stringify(step)
+    }); if(!r.ok) throw new Error();
+  },
+  async deleteQuestStep(id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/quest_steps?id=eq.${id}`, {method:"DELETE", headers:this.h});
+  },
+
   // ── Friend profile viewing ──────────────────────────────────────────────────
   async getFriendPublicQuests(userId) {
     // RLS already restricts this to quests marked public by an accepted friend —
@@ -483,6 +498,19 @@ const getTitle=(name)=>{
   return TITLES[Math.abs(h>>2)%TITLES.length];
 };
 
+const timeAgo=(dateString)=>{
+  const then = new Date(dateString);
+  const diffMs = Date.now() - then.getTime();
+  const mins = Math.floor(diffMs/60000);
+  if(mins<1) return "Just now";
+  if(mins<60) return `${mins}m ago`;
+  const hours = Math.floor(mins/60);
+  if(hours<24) return `${hours}h ago`;
+  const days = Math.floor(hours/24);
+  if(days<7) return `${days}d ago`;
+  return then.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+};
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STATUSES=["Active","Completed","On Hold","Abandoned"];
 const STATUS_META={
@@ -573,6 +601,7 @@ const Icons={
   star:    "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   film:    "M7 3v18M17 3v18M2 8h5M17 8h5M2 16h5M17 16h5M2 3h20a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z",
   lock:    "M5 11h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM7 11V7a5 5 0 0 1 10 0v4",
+  bell:    "M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9zM13.73 21a2 2 0 0 1-3.46 0",
 };
 
 // ─── PROGRESS RING (Apple-Fitness-style circular XP indicator) ───────────────
@@ -1345,12 +1374,37 @@ function ShareQuestCard({ quest, user, onClose }) {
 function QuestCard({quest,members,onEdit,onDelete,index}){
   const [expanded,setExpanded]=useState(false);
   const [hovered,setHovered]=useState(false);
+  const [steps,setSteps]=useState([]);
+  const [completingStepId,setCompletingStepId]=useState(null);
   const palette=getPalette(quest.id, quest.color_index);
   const {emoji}=STATUS_META[quest.status]||STATUS_META["Active"];
   const inviteeList=quest.invitees?quest.invitees.split(",").map(s=>s.trim()).filter(Boolean):[];
   const questMembers=members.filter(m=>inviteeList.map(n=>n.toLowerCase()).includes(m.name.toLowerCase()));
-  const hasDetails=quest.description||inviteeList.length>0||quest.location?.name;
+  const hasDetails=quest.description||inviteeList.length>0||quest.location?.name||steps.length>0;
   const isShared=!!quest.board_id;
+
+  useEffect(()=>{
+    let cancelled=false;
+    sb.getQuestSteps(quest.id).then(s=>{ if(!cancelled) setSteps(s); }).catch(()=>{});
+    return ()=>{ cancelled=true; };
+  },[quest.id]);
+
+  const handleStepPhoto = (step, e) => {
+    const file = e.target.files?.[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async(ev)=>{
+      const dataUrl = ev.target.result;
+      setCompletingStepId(step.id);
+      const updated = {...step, photo:dataUrl, completed:true, completed_at:new Date().toISOString()};
+      try {
+        await sb.upsertQuestStep(updated);
+        setSteps(prev=>prev.map(s=>s.id===step.id?updated:s));
+      } catch(err){ console.error("Step complete failed:", err); }
+      setCompletingStepId(null);
+    };
+    reader.readAsDataURL(file);
+  };
 
   return(
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
@@ -1496,7 +1550,7 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
       </div>
 
       {/* Expanded */}
-      <div style={{maxHeight:expanded?900:0,overflow:"hidden",transition:"max-height 0.45s cubic-bezier(0.4,0,0.2,1)"}}>
+      <div style={{maxHeight:expanded?2600:0,overflow:"hidden",transition:"max-height 0.5s cubic-bezier(0.4,0,0.2,1)"}}>
         <div style={{padding:"0 18px 20px",display:"flex",flexDirection:"column",gap:16,
           borderTop:`1px solid ${palette.color}20`}}>
           {/* XP value — always visible in the detail view, scales with difficulty */}
@@ -1522,6 +1576,91 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
               </div>
             );
           })()}
+
+          {/* Progression — each step needs its own photo before it counts */}
+          {steps.length>0&&(
+            <div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",
+                  color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
+                  Progression
+                </span>
+                <span style={{fontSize:12,fontWeight:700,color:palette.color,fontFamily:"'DM Sans',sans-serif"}}>
+                  {steps.filter(s=>s.completed).length}/{steps.length}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div style={{height:5,borderRadius:3,background:"rgba(255,255,255,0.07)",marginBottom:18,overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:3,
+                  width:`${Math.round((steps.filter(s=>s.completed).length/steps.length)*100)}%`,
+                  background:`linear-gradient(90deg,${palette.color}90,${palette.color})`,
+                  boxShadow:`0 0 8px ${palette.color}70`,
+                  transition:"width 0.6s cubic-bezier(0.34,1.2,0.64,1)"}}/>
+              </div>
+              {/* Vertical stepper */}
+              <div style={{display:"flex",flexDirection:"column"}}>
+                {steps.map((s,i)=>{
+                  const isLast = i===steps.length-1;
+                  const uploading = completingStepId===s.id;
+                  return(
+                    <div key={s.id||i} style={{display:"flex",gap:12}}>
+                      {/* Marker + connecting line */}
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+                        <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                          background:s.completed?palette.color:"rgba(255,255,255,0.06)",
+                          border:`2px solid ${s.completed?palette.color:"rgba(255,255,255,0.15)"}`,
+                          display:"flex",alignItems:"center",justifyContent:"center",
+                          fontSize:12,fontWeight:700,
+                          color:s.completed?"#0A0A0C":"rgba(255,255,255,0.3)",
+                          boxShadow:s.completed?`0 0 10px ${palette.color}80`:"none",
+                          transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)"}}>
+                          {s.completed?"✓":i+1}
+                        </div>
+                        {!isLast&&<div style={{width:2,flex:1,minHeight:24,
+                          background:s.completed?palette.color:"rgba(255,255,255,0.1)",
+                          transition:"background 0.3s ease"}}/>}
+                      </div>
+                      {/* Content */}
+                      <div style={{flex:1,minWidth:0,paddingBottom:isLast?4:18}}>
+                        <div style={{fontSize:13.5,fontWeight:600,
+                          color:s.completed?"rgba(255,255,255,0.55)":"#F0F0F0",
+                          fontFamily:"'DM Sans',sans-serif",lineHeight:1.4,
+                          textDecoration:s.completed?"line-through":"none",marginTop:3}}>
+                          {s.title}
+                        </div>
+                        {s.completed&&s.photo?(
+                          <img src={s.photo} alt="" style={{width:"100%",maxWidth:220,height:110,
+                            objectFit:"cover",borderRadius:10,marginTop:8,
+                            border:`1px solid ${palette.color}30`}}/>
+                        ):!s.completed?(
+                          <label style={{display:"inline-flex",alignItems:"center",gap:6,
+                            marginTop:8,padding:"7px 12px",borderRadius:9,cursor:"pointer",
+                            background:`${palette.color}12`,border:`1px solid ${palette.color}30`,
+                            opacity:uploading?0.6:1}}>
+                            {uploading?(
+                              <div style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.2)",
+                                borderTopColor:palette.color,borderRadius:"50%",
+                                animation:"spin 0.7s linear infinite"}}/>
+                            ):(
+                              <Icon d={Icons.camera} size={13} stroke={palette.color}/>
+                            )}
+                            <span style={{fontSize:11.5,fontWeight:700,color:palette.color,
+                              fontFamily:"'DM Sans',sans-serif"}}>
+                              {uploading?"Uploading…":"Complete with photo"}
+                            </span>
+                            <input type="file" accept="image/*" style={{display:"none"}}
+                              disabled={uploading}
+                              onChange={e=>handleStepPhoto(s,e)}/>
+                          </label>
+                        ):null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {quest.emoji&&(
             <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
               borderRadius:12,background:`${palette.color}08`,border:`1px solid ${palette.color}18`}}>
@@ -1675,16 +1814,36 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
   const [saving,setSaving]=useState(false);
   const [saveError,setSaveError]=useState("");
   const titleRef=useRef(null);
+
+  // Quest progression steps — planned here, completed (with required photo)
+  // from the expanded quest card out in the main list.
+  const [steps,setSteps]=useState([]); // {id?, title, photo?, completed?, completed_at?}
+  const [originalStepIds,setOriginalStepIds]=useState([]);
+  const [newStepTitle,setNewStepTitle]=useState("");
+
   useEffect(()=>{
     requestAnimationFrame(()=>setVisible(true));
     setTimeout(()=>titleRef.current?.focus(),100);
     // Lock body scroll while modal is open
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    if(quest?.id) {
+      sb.getQuestSteps(quest.id).then(s=>{
+        setSteps(s);
+        setOriginalStepIds(s.map(x=>x.id));
+      }).catch(()=>{});
+    }
     return ()=>{ document.body.style.overflow = prev; };
   },[]);
   const close=()=>{setVisible(false);setTimeout(onClose,250);};
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+
+  const addStep = () => {
+    if(!newStepTitle.trim()) return;
+    setSteps(s=>[...s,{title:newStepTitle.trim(),completed:false,photo:null}]);
+    setNewStepTitle("");
+  };
+  const removeStep = (idx) => setSteps(s=>s.filter((_,i)=>i!==idx));
 
   const handleSave=async()=>{
     if(!form.title.trim()) return;
@@ -1700,7 +1859,27 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
     const nowCompleted=form.status==="Completed";
     // Use manual date if set, auto-set if newly completed, else keep existing
     const completed_at=form.completed_at||(nowCompleted&&!wasCompleted?now:null);
-    await onSave({...form,id:form.id||crypto.randomUUID(),created_at:form.created_at||now,completed_at});
+    const questId = form.id||crypto.randomUUID();
+    await onSave({...form,id:questId,created_at:form.created_at||now,completed_at});
+
+    // Reconcile steps — preserves completion/photo on anything that already
+    // existed, only titles/order/additions/removals change here.
+    try {
+      const currentIds = steps.filter(s=>s.id).map(s=>s.id);
+      const removedIds = originalStepIds.filter(id=>!currentIds.includes(id));
+      await Promise.all(removedIds.map(id=>sb.deleteQuestStep(id)));
+      await Promise.all(steps.map((s,i)=>sb.upsertQuestStep({
+        id: s.id || crypto.randomUUID(),
+        quest_id: questId,
+        title: s.title,
+        photo: s.photo||null,
+        completed: s.completed||false,
+        completed_at: s.completed_at||null,
+        order_index: i,
+        created_at: s.created_at || new Date().toISOString(),
+      })));
+    } catch(e){ console.error("Step save failed:", e); }
+
     setSaving(false);
   };
 
@@ -1844,6 +2023,57 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
               </div>
             );
           })()}
+        </div>
+
+        {/* Progression steps — plan them here, complete each with a required
+            photo from the expanded quest card out in the main list */}
+        <div>
+          <label style={lbl}>Steps {steps.length>0&&`(${steps.filter(s=>s.completed).length}/${steps.length} done)`}</label>
+          {steps.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+              {steps.map((s,i)=>(
+                <div key={s.id||i} style={{display:"flex",alignItems:"center",gap:10,
+                  padding:"9px 12px",borderRadius:10,
+                  background:s.completed?"rgba(168,255,120,0.06)":"rgba(255,255,255,0.04)",
+                  border:`1px solid ${s.completed?"rgba(168,255,120,0.2)":"rgba(255,255,255,0.08)"}`}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,
+                    background:s.completed?"rgba(168,255,120,0.2)":"rgba(255,255,255,0.06)",
+                    border:`1.5px solid ${s.completed?"#A8FF78":"rgba(255,255,255,0.15)"}`,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:10,fontWeight:700,color:s.completed?"#A8FF78":"rgba(255,255,255,0.3)"}}>
+                    {s.completed?"✓":i+1}
+                  </div>
+                  <span style={{flex:1,fontSize:13,color:s.completed?"rgba(255,255,255,0.5)":"#F0F0F0",
+                    fontFamily:"'DM Sans',sans-serif",textDecoration:s.completed?"line-through":"none"}}>
+                    {s.title}
+                  </span>
+                  {s.photo&&<img src={s.photo} alt="" style={{width:24,height:24,borderRadius:6,
+                    objectFit:"cover",flexShrink:0}}/>}
+                  <button type="button" onClick={()=>removeStep(i)} style={{background:"none",
+                    border:"none",cursor:"pointer",color:"rgba(255,255,255,0.25)",padding:2,flexShrink:0}}>
+                    <Icon d={Icons.x} size={13}/>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{display:"flex",gap:8}}>
+            <input value={newStepTitle} onChange={e=>setNewStepTitle(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addStep();}}}
+              placeholder="e.g. Buy the ingredients"
+              style={{flex:1,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+                borderRadius:12,padding:"10px 14px",color:"#F0F0F0",fontSize:13.5,outline:"none",
+                fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"}}/>
+            <button type="button" onClick={addStep} disabled={!newStepTitle.trim()} style={{
+              padding:"0 16px",borderRadius:12,border:"none",cursor:"pointer",
+              background:"rgba(168,255,120,0.15)",color:"#A8FF78",fontSize:13,fontWeight:700,
+              fontFamily:"'DM Sans',sans-serif",flexShrink:0,opacity:newStepTitle.trim()?1:0.5}}>
+              Add
+            </button>
+          </div>
+          <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"6px 0 0",fontFamily:"'DM Sans',sans-serif"}}>
+            Optional — break this quest into steps. Each one needs its own photo to count as done, checked off from the quest card.
+          </p>
         </div>
 
         <div>
@@ -3193,6 +3423,184 @@ function LeaderboardView({ user, friends, quests, members }) {
 }
 
 // ─── FRIEND PROFILE MODAL — public quests + movie log, read-only ─────────────
+
+// ─── FRIEND QUEST PROGRESS — read-only progression view on a friend's public quest ──
+function FriendQuestProgress({ questId, color }) {
+  const [steps, setSteps] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    let cancelled = false;
+    sb.getQuestSteps(questId).then(s=>{
+      if(!cancelled){ setSteps(s); setLoading(false); }
+    }).catch(()=>{ if(!cancelled) setLoading(false); });
+    return ()=>{ cancelled=true; };
+  },[questId]);
+
+  if(loading || steps.length===0) return null;
+  const doneCount = steps.filter(s=>s.completed).length;
+
+  return (
+    <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${color}18`}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",
+          color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Progression</span>
+        <span style={{fontSize:11,fontWeight:700,color,fontFamily:"'DM Sans',sans-serif"}}>{doneCount}/{steps.length}</span>
+      </div>
+      <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.07)",marginBottom:10,overflow:"hidden"}}>
+        <div style={{height:"100%",borderRadius:2,width:`${Math.round((doneCount/steps.length)*100)}%`,
+          background:`linear-gradient(90deg,${color}90,${color})`,
+          transition:"width 0.5s cubic-bezier(0.34,1.2,0.64,1)"}}/>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {steps.map((s,i)=>(
+          <div key={s.id||i} style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{width:16,height:16,borderRadius:"50%",flexShrink:0,
+              background:s.completed?color:"rgba(255,255,255,0.08)",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:8,fontWeight:700,color:s.completed?"#0A0A0C":"rgba(255,255,255,0.3)"}}>
+              {s.completed?"✓":i+1}
+            </span>
+            <span style={{flex:1,fontSize:11.5,color:s.completed?"rgba(255,255,255,0.55)":"rgba(255,255,255,0.3)",
+              fontFamily:"'DM Sans',sans-serif",textDecoration:s.completed?"line-through":"none"}}>
+              {s.title}
+            </span>
+            {s.completed&&s.photo&&(
+              <img src={s.photo} alt="" style={{width:28,height:28,borderRadius:6,objectFit:"cover",flexShrink:0}}/>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// ─── ACTIVITY FEED — friends' progress on quests they've made public ─────────
+// Privacy is enforced by the database itself: getFriendPublicQuests and
+// getQuestSteps are both gated by RLS to (is_public = true AND is_friend(...)),
+// so a private quest's steps are structurally invisible here — not just hidden
+// in the UI. There is no path for this feed to ever see private progress.
+function ActivityFeedPage({ user, friends }) {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    let cancelled = false;
+    (async()=>{
+      setLoading(true);
+      try {
+        const built = [];
+        await Promise.all(friends.map(async(f)=>{
+          const quests = await sb.getFriendPublicQuests(f.user_id).catch(()=>[]);
+          await Promise.all(quests.map(async(q)=>{
+            if(q.status==="Completed" && q.completed_at) {
+              built.push({
+                type:"quest_complete", friend:f, quest:q,
+                photo:q.photo||null, timestamp:q.completed_at,
+              });
+            }
+            const steps = await sb.getQuestSteps(q.id).catch(()=>[]);
+            const doneSteps = steps.filter(s=>s.completed && s.completed_at);
+            doneSteps.forEach((s,idx)=>{
+              built.push({
+                type:"step", friend:f, quest:q, step:s,
+                photo:s.photo||null, timestamp:s.completed_at,
+                progress:{ done: steps.filter(x=>x.completed).length, total: steps.length },
+              });
+            });
+          }));
+        }));
+        built.sort((a,b)=> new Date(b.timestamp)-new Date(a.timestamp));
+        if(!cancelled){ setEvents(built); setLoading(false); }
+      } catch(e){ console.error(e); if(!cancelled) setLoading(false); }
+    })();
+    return ()=>{ cancelled=true; };
+  },[friends.length]);
+
+  return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
+      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+        color:"rgba(255,255,255,0.2)",marginBottom:4}}>What Friends Are Up To</p>
+      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:16}}>
+        Activity
+      </h2>
+
+      {loading?(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {[...Array(4)].map((_,i)=>(
+            <div key={i} style={{height:76,borderRadius:16,background:"rgba(255,255,255,0.04)",
+              animation:"pulseDot 1.4s ease-in-out infinite",animationDelay:`${i*0.1}s`}}/>
+          ))}
+        </div>
+      ):events.length===0?(
+        <div style={{textAlign:"center",padding:"60px 0"}}>
+          <div style={{fontSize:40,marginBottom:14,opacity:0.15}}>🔔</div>
+          <p style={{fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
+            Nothing yet. When friends complete steps or quests they've<br/>made public, you'll see it here.
+          </p>
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {events.map((ev,i)=>{
+            const palette = getPalette(ev.quest.id, ev.quest.color_index);
+            const {avatar,color} = getCharacter(ev.friend.name||"?");
+            return(
+              <div key={i} style={{display:"flex",gap:12,padding:"13px 14px",borderRadius:16,
+                background:`${palette.color}0A`,border:`1px solid ${palette.color}22`,
+                animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${Math.min(i,8)*0.04}s both`}}>
+                {/* Friend avatar */}
+                <div style={{width:38,height:38,borderRadius:11,flexShrink:0,overflow:"hidden",
+                  background:ev.friend.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+                  border:`1.5px solid ${color}45`,display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:18}}>
+                  {ev.friend.photo?<img src={ev.friend.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                </div>
+
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,color:"rgba(255,255,255,0.8)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.4}}>
+                    <span style={{fontWeight:700,color:"#fff"}}>{ev.friend.name}</span>{" "}
+                    {ev.type==="quest_complete"?(
+                      <>completed <span style={{fontWeight:700,color:palette.color}}>{ev.quest.title}</span> {ev.quest.emoji}</>
+                    ):(
+                      <>checked off <span style={{fontWeight:600,color:"rgba(255,255,255,0.9)"}}>{ev.step.title}</span>{" "}
+                        on <span style={{fontWeight:700,color:palette.color}}>{ev.quest.title}</span></>
+                    )}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5}}>
+                    <span style={{fontSize:10.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+                      {timeAgo(ev.timestamp)}
+                    </span>
+                    {ev.type==="step"&&(
+                      <span style={{fontSize:10,fontWeight:700,color:palette.color,fontFamily:"'DM Sans',sans-serif"}}>
+                        · {ev.progress.done}/{ev.progress.total} steps
+                      </span>
+                    )}
+                    {ev.type==="quest_complete"&&(
+                      <span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",
+                        color:"#A8FF78",background:"rgba(168,255,120,0.12)",border:"1px solid rgba(168,255,120,0.3)",
+                        borderRadius:5,padding:"1px 6px",fontFamily:"'DM Sans',sans-serif"}}>
+                        Quest Complete
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {ev.photo&&(
+                  <img src={ev.photo} alt="" style={{width:52,height:52,borderRadius:10,objectFit:"cover",
+                    flexShrink:0,border:`1px solid ${palette.color}30`}}/>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FriendProfileModal({ friend, onClose }) {
   const [visible, setVisible]   = useState(false);
   const [tab, setTab]           = useState("quests"); // quests | movies
@@ -3409,6 +3817,7 @@ function FriendProfileModal({ friend, onClose }) {
                         </div>
                         {q.photo&&<img src={q.photo} alt="" style={{width:"100%",height:140,objectFit:"cover",
                           borderRadius:10,marginTop:10}}/>}
+                        <FriendQuestProgress questId={q.id} color={palette.color}/>
                       </div>
                     );
                   })}
@@ -6383,6 +6792,7 @@ export default function App(){
     {id:"quests",   label:"Quests",   icon:Icons.shield, count:personalQuests.length},
     {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length+(boardInvites.length>0?boardInvites.length:0)},
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
+    {id:"activity", label:"Activity", icon:Icons.bell,   count:0},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"memories", label:"Memories", icon:Icons.camera, count:0},
     {id:"movies",   label:"Movies",   icon:Icons.film,   count:0},
@@ -6768,6 +7178,10 @@ export default function App(){
 
         {tab==="friends"&&(
           <FriendsPage user={user} quests={quests} members={members} onFriendsLoaded={f=>setFriends(f)}/>
+        )}
+
+        {tab==="activity"&&(
+          <ActivityFeedPage user={user} friends={friends}/>
         )}
 
         {tab==="memories"&&(
