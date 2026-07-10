@@ -1065,6 +1065,7 @@ function StreakCalendar({quests}){
 
 // ─── COMPLETED TAB ────────────────────────────────────────────────────────────
 function CompletedTab({quests,onEdit,onShare}){
+  const [expandedPhoto,setExpandedPhoto]=useState(null); // quest whose photo is shown full-size
   const done=quests.filter(q=>q.status==="Completed").sort((a,b)=>{
     if(!a.completed_at) return 1;
     if(!b.completed_at) return -1;
@@ -1090,13 +1091,18 @@ function CompletedTab({quests,onEdit,onShare}){
             borderRadius:16,overflow:"hidden",
             animation:`cardIn 0.4s ease ${i*0.06}s both`,
           }}>
-            {/* Photo */}
+            {/* Photo — tap to see the full, uncropped picture */}
             {q.photo&&(
-              <div style={{position:"relative",height:160,overflow:"hidden"}}>
+              <button onClick={()=>setExpandedPhoto(q)} style={{position:"relative",height:160,
+                overflow:"hidden",width:"100%",padding:0,border:"none",cursor:"zoom-in",display:"block"}}>
                 <img src={q.photo} alt="completion" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                 <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(8,8,12,0.8) 0%,transparent 50%)"}}/>
                 <div style={{position:"absolute",bottom:10,left:14,fontSize:20}}>{q.emoji||"🏆"}</div>
-              </div>
+                <div style={{position:"absolute",bottom:10,right:10,background:"rgba(0,0,0,0.55)",
+                  borderRadius:7,padding:"3px 6px",display:"flex",alignItems:"center",gap:3}}>
+                  <Icon d={Icons.search} size={10} stroke="rgba(255,255,255,0.8)"/>
+                </div>
+              </button>
             )}
 
             <div style={{padding:"14px 16px"}}>
@@ -1145,6 +1151,12 @@ function CompletedTab({quests,onEdit,onShare}){
           </div>
         );
       })}
+
+      {expandedPhoto&&(
+        <PhotoLightbox photo={expandedPhoto.photo} title={expandedPhoto.title}
+          subtitle={expandedPhoto.completed_at?`Completed ${new Date(expandedPhoto.completed_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`:null}
+          onClose={()=>setExpandedPhoto(null)}/>
+      )}
     </div>
   );
 }
@@ -2046,19 +2058,36 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
                   padding:"9px 12px",borderRadius:10,
                   background:s.completed?"rgba(168,255,120,0.06)":"rgba(255,255,255,0.04)",
                   border:`1px solid ${s.completed?"rgba(168,255,120,0.2)":"rgba(255,255,255,0.08)"}`}}>
-                  <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,
+                  {/* Tap the marker to complete this step with a photo — right here, no need to leave the form */}
+                  <label style={{width:24,height:24,borderRadius:"50%",flexShrink:0,cursor:"pointer",
                     background:s.completed?"rgba(168,255,120,0.2)":"rgba(255,255,255,0.06)",
-                    border:`1.5px solid ${s.completed?"#A8FF78":"rgba(255,255,255,0.15)"}`,
+                    border:`1.5px solid ${s.completed?"#A8FF78":"rgba(255,255,255,0.2)"}`,
                     display:"flex",alignItems:"center",justifyContent:"center",
                     fontSize:10,fontWeight:700,color:s.completed?"#A8FF78":"rgba(255,255,255,0.3)"}}>
-                    {s.completed?"✓":i+1}
-                  </div>
+                    {s.completed?<Icon d={Icons.check} size={11} stroke="#A8FF78"/>:(i+1)}
+                    <input type="file" accept="image/*" style={{display:"none"}}
+                      onChange={e=>{
+                        const file=e.target.files?.[0]; if(!file) return;
+                        const reader=new FileReader();
+                        reader.onload=(ev)=>{
+                          setSteps(prev=>prev.map((st,idx)=>idx===i
+                            ?{...st,photo:ev.target.result,completed:true,completed_at:st.completed_at||new Date().toISOString()}
+                            :st));
+                        };
+                        reader.readAsDataURL(file);
+                      }}/>
+                  </label>
                   <span style={{flex:1,fontSize:13,color:s.completed?"rgba(255,255,255,0.5)":"#F0F0F0",
                     fontFamily:"'DM Sans',sans-serif",textDecoration:s.completed?"line-through":"none"}}>
                     {s.title}
                   </span>
-                  {s.photo&&<img src={s.photo} alt="" style={{width:24,height:24,borderRadius:6,
-                    objectFit:"cover",flexShrink:0}}/>}
+                  {s.photo?(
+                    <img src={s.photo} alt="" style={{width:28,height:28,borderRadius:7,
+                      objectFit:"cover",flexShrink:0,border:"1px solid rgba(168,255,120,0.3)"}}/>
+                  ):(
+                    <span style={{fontSize:9.5,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
+                      fontStyle:"italic",flexShrink:0}}>tap ○ for photo</span>
+                  )}
                   <button type="button" onClick={()=>removeStep(i)} style={{background:"none",
                     border:"none",cursor:"pointer",color:"rgba(255,255,255,0.25)",padding:2,flexShrink:0}}>
                     <Icon d={Icons.x} size={13}/>
@@ -2082,7 +2111,7 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
             </button>
           </div>
           <p style={{fontSize:11,color:"rgba(255,255,255,0.2)",margin:"6px 0 0",fontFamily:"'DM Sans',sans-serif"}}>
-            Optional — break this quest into steps. Each one needs its own photo to count as done, checked off from the quest card.
+            Optional — break this quest into steps. Tap a step's circle to complete it with a photo, right here or later from the quest card.
           </p>
         </div>
 
@@ -3640,6 +3669,7 @@ function FriendProfileModal({ friend, onClose }) {
   const [loading, setLoading]   = useState(true);
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [expandedKey, setExpandedKey] = useState(null); // only one show stack open at a time
+  const [expandedQuestPhoto, setExpandedQuestPhoto] = useState(null); // quest whose photo is shown full-size
 
   const {avatar,color} = getCharacter(friend.name||"?");
 
@@ -3845,8 +3875,18 @@ function FriendProfileModal({ friend, onClose }) {
                               fontFamily:"'DM Sans',sans-serif",marginTop:4}}>📍 {q.location.name}</div>}
                           </div>
                         </div>
-                        {q.photo&&<img src={q.photo} alt="" style={{width:"100%",height:140,objectFit:"cover",
-                          borderRadius:10,marginTop:10}}/>}
+                        {q.photo&&(
+                          <button onClick={()=>setExpandedQuestPhoto(q)} style={{position:"relative",
+                            width:"100%",height:140,padding:0,border:"none",cursor:"zoom-in",
+                            display:"block",marginTop:10}}>
+                            <img src={q.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover",
+                              borderRadius:10,display:"block"}}/>
+                            <div style={{position:"absolute",bottom:6,right:6,background:"rgba(0,0,0,0.55)",
+                              borderRadius:7,padding:"3px 6px",display:"flex",alignItems:"center",gap:3}}>
+                              <Icon d={Icons.search} size={10} stroke="rgba(255,255,255,0.8)"/>
+                            </div>
+                          </button>
+                        )}
                         <FriendQuestProgress questId={q.id} color={palette.color}/>
                       </div>
                     );
@@ -3973,6 +4013,11 @@ function FriendProfileModal({ friend, onClose }) {
 
         {selectedMovie&&(
           <FriendMovieDetail movie={selectedMovie} onClose={()=>setSelectedMovie(null)}/>
+        )}
+        {expandedQuestPhoto&&(
+          <PhotoLightbox photo={expandedQuestPhoto.photo} title={expandedQuestPhoto.title}
+            subtitle={expandedQuestPhoto.completed_at?`Completed ${new Date(expandedQuestPhoto.completed_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`:null}
+            onClose={()=>setExpandedQuestPhoto(null)}/>
         )}
       </div>
     </div>,
@@ -5480,6 +5525,49 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
 }
 
 // ─── MEMORY PHOTO LIGHTBOX — full uncropped photo + title/description ────────
+// ─── GENERIC PHOTO LIGHTBOX — full uncropped photo + title/subtitle ──────────
+function PhotoLightbox({ photo, title, subtitle, onClose }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
+  const close=()=>{ setVisible(false); setTimeout(onClose,200); };
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,zIndex:10001,
+      background:`rgba(4,4,6,${visible?0.96:0})`,backdropFilter:`blur(${visible?10:0}px)`,
+      display:"flex",flexDirection:"column",transition:"all 0.25s",
+      opacity:visible?1:0}}
+      onClick={e=>e.target===e.currentTarget&&close()}>
+
+      <div style={{display:"flex",justifyContent:"flex-end",padding:"20px 20px 0",flexShrink:0}}>
+        <button onClick={close} style={{background:"rgba(255,255,255,0.08)",
+          border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"8px 9px",
+          cursor:"pointer",color:"rgba(255,255,255,0.7)"}}>
+          <Icon d={Icons.x} size={17}/>
+        </button>
+      </div>
+
+      <div style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",
+        padding:"8px 16px",overflow:"hidden"}}
+        onClick={e=>e.target===e.currentTarget&&close()}>
+        <img src={photo} alt="" style={{
+          maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12,
+          boxShadow:"0 12px 48px rgba(0,0,0,0.6)",
+          transform:visible?"scale(1)":"scale(0.94)",transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)"}}/>
+      </div>
+
+      {(title||subtitle)&&(
+        <div style={{flexShrink:0,padding:"16px 22px calc(env(safe-area-inset-bottom,0px) + 22px)"}}>
+          {title&&<div style={{fontSize:17,fontWeight:700,color:"#F2F2F2",
+            fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3}}>{title}</div>}
+          {subtitle&&<div style={{fontSize:13.5,color:"rgba(255,255,255,0.5)",
+            fontFamily:"'DM Sans',sans-serif",marginTop:4,lineHeight:1.6}}>{subtitle}</div>}
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+}
+
 function MemoryPhotoLightbox({ memory, onClose }) {
   const [visible, setVisible] = useState(false);
   useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
