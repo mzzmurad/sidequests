@@ -1577,89 +1577,99 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
             );
           })()}
 
-          {/* Progression — each step needs its own photo before it counts */}
-          {steps.length>0&&(
+          {/* Progression — horizontal stepper, tap a dot to complete it with a photo */}
+          {steps.length>0&&(()=>{
+            const doneCount = steps.filter(s=>s.completed).length;
+            const firstIncompleteIdx = steps.findIndex(s=>!s.completed);
+            const completedPhotos = steps.filter(s=>s.completed&&s.photo);
+            return(
             <div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                 <span style={{fontSize:11,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",
                   color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
                   Progression
                 </span>
                 <span style={{fontSize:12,fontWeight:700,color:palette.color,fontFamily:"'DM Sans',sans-serif"}}>
-                  {steps.filter(s=>s.completed).length}/{steps.length}
+                  {doneCount}/{steps.length}
                 </span>
               </div>
-              {/* Progress bar */}
-              <div style={{height:5,borderRadius:3,background:"rgba(255,255,255,0.07)",marginBottom:18,overflow:"hidden"}}>
-                <div style={{height:"100%",borderRadius:3,
-                  width:`${Math.round((steps.filter(s=>s.completed).length/steps.length)*100)}%`,
-                  background:`linear-gradient(90deg,${palette.color}90,${palette.color})`,
-                  boxShadow:`0 0 8px ${palette.color}70`,
-                  transition:"width 0.6s cubic-bezier(0.34,1.2,0.64,1)"}}/>
-              </div>
-              {/* Vertical stepper */}
-              <div style={{display:"flex",flexDirection:"column"}}>
-                {steps.map((s,i)=>{
-                  const isLast = i===steps.length-1;
-                  const uploading = completingStepId===s.id;
-                  return(
-                    <div key={s.id||i} style={{display:"flex",gap:12}}>
-                      {/* Marker + connecting line */}
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
-                        <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
-                          background:s.completed?palette.color:"rgba(255,255,255,0.06)",
-                          border:`2px solid ${s.completed?palette.color:"rgba(255,255,255,0.15)"}`,
-                          display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize:12,fontWeight:700,
-                          color:s.completed?"#0A0A0C":"rgba(255,255,255,0.3)",
-                          boxShadow:s.completed?`0 0 10px ${palette.color}80`:"none",
-                          transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)"}}>
-                          {s.completed?"✓":i+1}
-                        </div>
-                        {!isLast&&<div style={{width:2,flex:1,minHeight:24,
-                          background:s.completed?palette.color:"rgba(255,255,255,0.1)",
-                          transition:"background 0.3s ease"}}/>}
-                      </div>
-                      {/* Content */}
-                      <div style={{flex:1,minWidth:0,paddingBottom:isLast?4:18}}>
-                        <div style={{fontSize:13.5,fontWeight:600,
-                          color:s.completed?"rgba(255,255,255,0.55)":"#F0F0F0",
-                          fontFamily:"'DM Sans',sans-serif",lineHeight:1.4,
-                          textDecoration:s.completed?"line-through":"none",marginTop:3}}>
-                          {s.title}
-                        </div>
-                        {s.completed&&s.photo?(
-                          <img src={s.photo} alt="" style={{width:"100%",maxWidth:220,height:110,
-                            objectFit:"cover",borderRadius:10,marginTop:8,
-                            border:`1px solid ${palette.color}30`}}/>
-                        ):!s.completed?(
-                          <label style={{display:"inline-flex",alignItems:"center",gap:6,
-                            marginTop:8,padding:"7px 12px",borderRadius:9,cursor:"pointer",
-                            background:`${palette.color}12`,border:`1px solid ${palette.color}30`,
-                            opacity:uploading?0.6:1}}>
-                            {uploading?(
-                              <div style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.2)",
+
+              {/* Horizontal stepper */}
+              <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",marginBottom:completedPhotos.length>0?14:2,
+                paddingBottom:2}}>
+                <div style={{display:"flex",alignItems:"flex-start",minWidth:"max-content"}}>
+                  {steps.map((s,i)=>{
+                    const isLast = i===steps.length-1;
+                    const isCurrent = i===firstIncompleteIdx;
+                    const uploading = completingStepId===s.id;
+                    return(
+                      <div key={s.id||i} style={{display:"flex",alignItems:"flex-start"}}>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:74}}>
+                          <label style={{
+                            width:isCurrent?28:22,height:isCurrent?28:22,borderRadius:"50%",flexShrink:0,
+                            background:s.completed?palette.color:"rgba(255,255,255,0.05)",
+                            border:`2px solid ${s.completed||isCurrent?palette.color:"rgba(255,255,255,0.18)"}`,
+                            display:"flex",alignItems:"center",justifyContent:"center",
+                            cursor:s.completed?"default":"pointer",
+                            boxShadow:s.completed?`0 0 10px ${palette.color}80`
+                              :isCurrent?`0 0 0 4px ${palette.color}20`:"none",
+                            transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)",
+                          }}>
+                            {s.completed?(
+                              <Icon d={Icons.check} size={11} stroke="#0A0A0C"/>
+                            ):uploading?(
+                              <div style={{width:10,height:10,border:"2px solid rgba(255,255,255,0.2)",
                                 borderTopColor:palette.color,borderRadius:"50%",
                                 animation:"spin 0.7s linear infinite"}}/>
-                            ):(
-                              <Icon d={Icons.camera} size={13} stroke={palette.color}/>
+                            ):isCurrent?(
+                              <div style={{width:8,height:8,borderRadius:"50%",background:palette.color}}/>
+                            ):null}
+                            {!s.completed&&(
+                              <input type="file" accept="image/*" style={{display:"none"}}
+                                disabled={uploading} onChange={e=>handleStepPhoto(s,e)}/>
                             )}
-                            <span style={{fontSize:11.5,fontWeight:700,color:palette.color,
-                              fontFamily:"'DM Sans',sans-serif"}}>
-                              {uploading?"Uploading…":"Complete with photo"}
-                            </span>
-                            <input type="file" accept="image/*" style={{display:"none"}}
-                              disabled={uploading}
-                              onChange={e=>handleStepPhoto(s,e)}/>
                           </label>
-                        ):null}
+                          <span style={{fontSize:9.5,fontWeight:isCurrent?700:500,
+                            color:s.completed?"rgba(255,255,255,0.4)":isCurrent?palette.color:"rgba(255,255,255,0.28)",
+                            marginTop:7,textAlign:"center",maxWidth:70,letterSpacing:"0.02em",
+                            textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",
+                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            {s.title}
+                          </span>
+                        </div>
+                        {!isLast&&(
+                          <div style={{height:2,width:32,marginTop:10,flexShrink:0,
+                            background:s.completed?palette.color:"rgba(255,255,255,0.12)",
+                            transition:"background 0.3s ease"}}/>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* Current step's action, spelled out below the compact stepper */}
+              {firstIncompleteIdx!==-1&&(
+                <p style={{fontSize:11.5,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",
+                  margin:completedPhotos.length>0?"0 0 14px":"0 0 2px"}}>
+                  Tap the highlighted dot to complete <span style={{color:palette.color,fontWeight:700}}>
+                  {steps[firstIncompleteIdx].title}</span> with a photo.
+                </p>
+              )}
+
+              {/* Proof gallery — thumbnails from every completed step */}
+              {completedPhotos.length>0&&(
+                <div style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+                  {completedPhotos.map(s=>(
+                    <img key={s.id} src={s.photo} alt="" title={s.title} style={{
+                      width:64,height:64,borderRadius:10,objectFit:"cover",flexShrink:0,
+                      border:`1px solid ${palette.color}35`}}/>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {quest.emoji&&(
             <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
@@ -3439,38 +3449,58 @@ function FriendQuestProgress({ questId, color }) {
 
   if(loading || steps.length===0) return null;
   const doneCount = steps.filter(s=>s.completed).length;
+  const completedPhotos = steps.filter(s=>s.completed&&s.photo);
 
   return (
     <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${color}18`}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",
           color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>Progression</span>
         <span style={{fontSize:11,fontWeight:700,color,fontFamily:"'DM Sans',sans-serif"}}>{doneCount}/{steps.length}</span>
       </div>
-      <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.07)",marginBottom:10,overflow:"hidden"}}>
-        <div style={{height:"100%",borderRadius:2,width:`${Math.round((doneCount/steps.length)*100)}%`,
-          background:`linear-gradient(90deg,${color}90,${color})`,
-          transition:"width 0.5s cubic-bezier(0.34,1.2,0.64,1)"}}/>
+
+      {/* Read-only horizontal stepper — same visual language as your own quests */}
+      <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",
+        marginBottom:completedPhotos.length>0?12:0,paddingBottom:2}}>
+        <div style={{display:"flex",alignItems:"flex-start",minWidth:"max-content"}}>
+          {steps.map((s,i)=>{
+            const isLast = i===steps.length-1;
+            return(
+              <div key={s.id||i} style={{display:"flex",alignItems:"flex-start"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:62}}>
+                  <div style={{width:18,height:18,borderRadius:"50%",flexShrink:0,
+                    background:s.completed?color:"rgba(255,255,255,0.06)",
+                    border:`2px solid ${s.completed?color:"rgba(255,255,255,0.15)"}`,
+                    display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {s.completed&&<Icon d={Icons.check} size={9} stroke="#0A0A0C"/>}
+                  </div>
+                  <span style={{fontSize:8.5,fontWeight:500,
+                    color:s.completed?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.25)",
+                    marginTop:5,textAlign:"center",maxWidth:58,letterSpacing:"0.02em",
+                    textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {s.title}
+                  </span>
+                </div>
+                {!isLast&&(
+                  <div style={{height:2,width:22,marginTop:8,flexShrink:0,
+                    background:s.completed?color:"rgba(255,255,255,0.1)"}}/>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        {steps.map((s,i)=>(
-          <div key={s.id||i} style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{width:16,height:16,borderRadius:"50%",flexShrink:0,
-              background:s.completed?color:"rgba(255,255,255,0.08)",
-              display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:8,fontWeight:700,color:s.completed?"#0A0A0C":"rgba(255,255,255,0.3)"}}>
-              {s.completed?"✓":i+1}
-            </span>
-            <span style={{flex:1,fontSize:11.5,color:s.completed?"rgba(255,255,255,0.55)":"rgba(255,255,255,0.3)",
-              fontFamily:"'DM Sans',sans-serif",textDecoration:s.completed?"line-through":"none"}}>
-              {s.title}
-            </span>
-            {s.completed&&s.photo&&(
-              <img src={s.photo} alt="" style={{width:28,height:28,borderRadius:6,objectFit:"cover",flexShrink:0}}/>
-            )}
-          </div>
-        ))}
-      </div>
+
+      {completedPhotos.length>0&&(
+        <div style={{display:"flex",gap:6,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          {completedPhotos.map(s=>(
+            <img key={s.id} src={s.photo} alt="" title={s.title} style={{
+              width:44,height:44,borderRadius:8,objectFit:"cover",flexShrink:0,
+              border:`1px solid ${color}30`}}/>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
