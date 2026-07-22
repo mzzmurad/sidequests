@@ -569,8 +569,8 @@ const EMOJI_GROUPS={
 };
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const Icon=({d,size=18,stroke="currentColor",fill="none"})=>(
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill}
+const Icon=({d,size=18,stroke="currentColor",fill="none",style})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} style={style}
     stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d={d}/>
   </svg>
@@ -1065,7 +1065,6 @@ function StreakCalendar({quests}){
 
 // ─── COMPLETED TAB ────────────────────────────────────────────────────────────
 function CompletedTab({quests,onEdit,onShare}){
-  const [expandedPhoto,setExpandedPhoto]=useState(null); // quest whose photo is shown full-size
   const done=quests.filter(q=>q.status==="Completed").sort((a,b)=>{
     if(!a.completed_at) return 1;
     if(!b.completed_at) return -1;
@@ -1081,81 +1080,117 @@ function CompletedTab({quests,onEdit,onShare}){
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {done.map((q,i)=>{
-        const palette=getPalette(q.id, q.color_index);
-        return(
-          <div key={q.id} style={{
-            background:"rgba(255,255,255,0.03)",
-            border:`1px solid ${palette.color}25`,
-            borderLeft:`3px solid ${palette.color}`,
-            borderRadius:16,overflow:"hidden",
-            animation:`cardIn 0.4s ease ${i*0.06}s both`,
-          }}>
-            {/* Photo — tap to see the full, uncropped picture */}
-            {q.photo&&(
-              <button onClick={()=>setExpandedPhoto(q)} style={{position:"relative",height:160,
-                overflow:"hidden",width:"100%",padding:0,border:"none",cursor:"zoom-in",display:"block"}}>
-                <img src={q.photo} alt="completion" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(8,8,12,0.8) 0%,transparent 50%)"}}/>
-                <div style={{position:"absolute",bottom:10,left:14,fontSize:20}}>{q.emoji||"🏆"}</div>
-                <div style={{position:"absolute",bottom:10,right:10,background:"rgba(0,0,0,0.55)",
-                  borderRadius:7,padding:"3px 6px",display:"flex",alignItems:"center",gap:3}}>
-                  <Icon d={Icons.search} size={10} stroke="rgba(255,255,255,0.8)"/>
-                </div>
-              </button>
-            )}
+      {done.map((q,i)=>(
+        <CompletedQuestCard key={q.id} quest={q} index={i} onEdit={onEdit} onShare={onShare}/>
+      ))}
+    </div>
+  );
+}
 
-            <div style={{padding:"14px 16px"}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                    {!q.photo&&q.emoji&&<span style={{fontSize:18}}>{q.emoji}</span>}
-                    <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#F2F2F2",
-                      fontFamily:"'Cormorant Garamond',serif",letterSpacing:"-0.01em"}}>{q.title}</h3>
-                  </div>
-                  {q.completed_at&&(
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:14}}>🔥</span>
-                      <span style={{fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
-                        Completed {new Date(q.completed_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
-                      </span>
-                    </div>
-                  )}
-                  {q.description&&(
-                    <p style={{margin:"8px 0 0",fontSize:13,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6,
-                      display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{q.description}</p>
-                  )}
-                </div>
-                <div style={{display:"flex",gap:6,flexShrink:0}}>
-                  <button onClick={()=>onShare&&onShare(q)} style={{background:"rgba(192,132,252,0.1)",
-                    border:"1px solid rgba(192,132,252,0.25)",
-                    borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(192,132,252,0.8)",flexShrink:0}}>
-                    <Icon d={Icons.link} size={13}/>
-                  </button>
-                  <button onClick={()=>onEdit(q)} style={{background:"none",border:"1px solid rgba(255,255,255,0.1)",
-                    borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.35)",flexShrink:0}}>
-                    <Icon d={Icons.edit} size={13}/>
-                  </button>
-                </div>
+// ─── COMPLETED QUEST CARD — shown in Done tab, includes step proof photos ────
+function CompletedQuestCard({ quest:q, index:i, onEdit, onShare }) {
+  const [expandedPhoto,setExpandedPhoto]=useState(null); // {photo,title,subtitle}
+  const [steps,setSteps]=useState([]);
+  const palette=getPalette(q.id, q.color_index);
+
+  useEffect(()=>{
+    let cancelled=false;
+    sb.getQuestSteps(q.id).then(s=>{ if(!cancelled) setSteps(s); }).catch(()=>{});
+    return ()=>{ cancelled=true; };
+  },[q.id]);
+
+  const stepPhotos = steps.filter(s=>s.photo);
+
+  return(
+    <div style={{
+      background:"rgba(255,255,255,0.03)",
+      border:`1px solid ${palette.color}25`,
+      borderLeft:`3px solid ${palette.color}`,
+      borderRadius:16,overflow:"hidden",
+      animation:`cardIn 0.4s ease ${i*0.06}s both`,
+    }}>
+      {/* Photo — tap to see the full, uncropped picture */}
+      {q.photo&&(
+        <button onClick={()=>setExpandedPhoto({photo:q.photo,title:q.title,
+          subtitle:q.completed_at?`Completed ${new Date(q.completed_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`:null})}
+          style={{position:"relative",height:160,
+          overflow:"hidden",width:"100%",padding:0,border:"none",cursor:"zoom-in",display:"block"}}>
+          <img src={q.photo} alt="completion" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+          <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(8,8,12,0.8) 0%,transparent 50%)"}}/>
+          <div style={{position:"absolute",bottom:10,left:14,fontSize:20}}>{q.emoji||"🏆"}</div>
+          <div style={{position:"absolute",bottom:10,right:10,background:"rgba(0,0,0,0.55)",
+            borderRadius:7,padding:"3px 6px",display:"flex",alignItems:"center",gap:3}}>
+            <Icon d={Icons.search} size={10} stroke="rgba(255,255,255,0.8)"/>
+          </div>
+        </button>
+      )}
+
+      <div style={{padding:"14px 16px"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+              {!q.photo&&q.emoji&&<span style={{fontSize:18}}>{q.emoji}</span>}
+              <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#F2F2F2",
+                fontFamily:"'Cormorant Garamond',serif",letterSpacing:"-0.01em"}}>{q.title}</h3>
+            </div>
+            {q.completed_at&&(
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:14}}>🔥</span>
+                <span style={{fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
+                  Completed {new Date(q.completed_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
+                </span>
               </div>
+            )}
+            {q.description&&(
+              <p style={{margin:"8px 0 0",fontSize:13,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6,
+                display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{q.description}</p>
+            )}
+          </div>
+          <div style={{display:"flex",gap:6,flexShrink:0}}>
+            <button onClick={()=>onShare&&onShare(q)} style={{background:"rgba(192,132,252,0.1)",
+              border:"1px solid rgba(192,132,252,0.25)",
+              borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(192,132,252,0.8)",flexShrink:0}}>
+              <Icon d={Icons.link} size={13}/>
+            </button>
+            <button onClick={()=>onEdit(q)} style={{background:"none",border:"1px solid rgba(255,255,255,0.1)",
+              borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.35)",flexShrink:0}}>
+              <Icon d={Icons.edit} size={13}/>
+            </button>
+          </div>
+        </div>
 
-              {/* Party avatars */}
-              {q.invitees&&(
-                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10}}>
-                  {q.invitees.split(",").map(s=>s.trim()).filter(Boolean).slice(0,5).map((name,i)=>(
-                    <MiniAvatar key={i} name={name} size={24} overlap={i>0}/>
-                  ))}
-                </div>
-              )}
+        {/* Party avatars */}
+        {q.invitees&&(
+          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10}}>
+            {q.invitees.split(",").map(s=>s.trim()).filter(Boolean).slice(0,5).map((name,i2)=>(
+              <MiniAvatar key={i2} name={name} size={24} overlap={i2>0}/>
+            ))}
+          </div>
+        )}
+
+        {/* Step proof photos — tap any to view full size */}
+        {stepPhotos.length>0&&(
+          <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${palette.color}18`}}>
+            <p style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",
+              color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",marginBottom:8}}>
+              Step Photos
+            </p>
+            <div style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+              {stepPhotos.map(s=>(
+                <button key={s.id} onClick={()=>setExpandedPhoto({photo:s.photo,title:s.title,subtitle:q.title})}
+                  style={{width:52,height:52,borderRadius:9,flexShrink:0,padding:0,cursor:"zoom-in",
+                    border:`1px solid ${palette.color}30`,overflow:"hidden"}}>
+                  <img src={s.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                </button>
+              ))}
             </div>
           </div>
-        );
-      })}
+        )}
+      </div>
 
       {expandedPhoto&&(
         <PhotoLightbox photo={expandedPhoto.photo} title={expandedPhoto.title}
-          subtitle={expandedPhoto.completed_at?`Completed ${new Date(expandedPhoto.completed_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`:null}
-          onClose={()=>setExpandedPhoto(null)}/>
+          subtitle={expandedPhoto.subtitle} onClose={()=>setExpandedPhoto(null)}/>
       )}
     </div>
   );
@@ -1388,6 +1423,7 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
   const [hovered,setHovered]=useState(false);
   const [steps,setSteps]=useState([]);
   const [completingStepId,setCompletingStepId]=useState(null);
+  const [expandedStepPhoto,setExpandedStepPhoto]=useState(null); // step whose photo is shown full-size
   const palette=getPalette(quest.id, quest.color_index);
   const {emoji}=STATUS_META[quest.status]||STATUS_META["Active"];
   const inviteeList=quest.invitees?quest.invitees.split(",").map(s=>s.trim()).filter(Boolean):[];
@@ -1401,6 +1437,17 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
     return ()=>{ cancelled=true; };
   },[quest.id]);
 
+  // Marking a step done is a simple toggle — a photo is optional proof, not a requirement
+  const handleStepToggle = async(step) => {
+    const nowComplete = !step.completed;
+    const updated = {...step, completed:nowComplete, completed_at:nowComplete?new Date().toISOString():step.completed_at};
+    setSteps(prev=>prev.map(s=>s.id===step.id?updated:s));
+    try { await sb.upsertQuestStep(updated); }
+    catch(err){ console.error("Step toggle failed:", err); setSteps(prev=>prev.map(s=>s.id===step.id?step:s)); }
+  };
+
+  // Attaching a photo is optional and independent of the completion toggle —
+  // doing so also marks the step complete, since that's usually the intent.
   const handleStepPhoto = (step, e) => {
     const file = e.target.files?.[0];
     if(!file) return;
@@ -1408,11 +1455,11 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
     reader.onload = async(ev)=>{
       const dataUrl = ev.target.result;
       setCompletingStepId(step.id);
-      const updated = {...step, photo:dataUrl, completed:true, completed_at:new Date().toISOString()};
+      const updated = {...step, photo:dataUrl, completed:true, completed_at:step.completed_at||new Date().toISOString()};
       try {
         await sb.upsertQuestStep(updated);
         setSteps(prev=>prev.map(s=>s.id===step.id?updated:s));
-      } catch(err){ console.error("Step complete failed:", err); }
+      } catch(err){ console.error("Step photo failed:", err); }
       setCompletingStepId(null);
     };
     reader.readAsDataURL(file);
@@ -1589,11 +1636,10 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
             );
           })()}
 
-          {/* Progression — horizontal stepper, tap a dot to complete it with a photo */}
+          {/* Progression — tap the dot to mark done (no photo needed), tap the camera badge to attach one (optional) */}
           {steps.length>0&&(()=>{
             const doneCount = steps.filter(s=>s.completed).length;
-            const firstIncompleteIdx = steps.findIndex(s=>!s.completed);
-            const completedPhotos = steps.filter(s=>s.completed&&s.photo);
+            const completedPhotos = steps.filter(s=>s.photo);
             return(
             <div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -1612,45 +1658,48 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
                 <div style={{display:"flex",alignItems:"flex-start",minWidth:"max-content"}}>
                   {steps.map((s,i)=>{
                     const isLast = i===steps.length-1;
-                    const isCurrent = i===firstIncompleteIdx;
                     const uploading = completingStepId===s.id;
                     return(
                       <div key={s.id||i} style={{display:"flex",alignItems:"flex-start"}}>
                         <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:74}}>
-                          <label style={{
-                            width:isCurrent?28:22,height:isCurrent?28:22,borderRadius:"50%",flexShrink:0,
-                            background:s.completed?palette.color:"rgba(255,255,255,0.05)",
-                            border:`2px solid ${s.completed||isCurrent?palette.color:"rgba(255,255,255,0.18)"}`,
-                            display:"flex",alignItems:"center",justifyContent:"center",
-                            cursor:s.completed?"default":"pointer",
-                            boxShadow:s.completed?`0 0 10px ${palette.color}80`
-                              :isCurrent?`0 0 0 4px ${palette.color}20`:"none",
-                            transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)",
-                          }}>
-                            {s.completed?(
-                              <Icon d={Icons.check} size={11} stroke="#0A0A0C"/>
-                            ):uploading?(
-                              <div style={{width:10,height:10,border:"2px solid rgba(255,255,255,0.2)",
-                                borderTopColor:palette.color,borderRadius:"50%",
-                                animation:"spin 0.7s linear infinite"}}/>
-                            ):isCurrent?(
-                              <div style={{width:8,height:8,borderRadius:"50%",background:palette.color}}/>
-                            ):null}
-                            {!s.completed&&(
+                          <div style={{position:"relative"}}>
+                            {/* Tap = toggle complete, no photo required */}
+                            <button onClick={()=>handleStepToggle(s)} style={{
+                              width:26,height:26,borderRadius:"50%",flexShrink:0,cursor:"pointer",padding:0,
+                              background:s.completed?palette.color:"rgba(255,255,255,0.05)",
+                              border:`2px solid ${s.completed?palette.color:"rgba(255,255,255,0.2)"}`,
+                              display:"flex",alignItems:"center",justifyContent:"center",
+                              boxShadow:s.completed?`0 0 10px ${palette.color}80`:"none",
+                              transition:"all 0.3s cubic-bezier(0.34,1.2,0.64,1)",
+                            }}>
+                              {s.completed&&<Icon d={Icons.check} size={12} stroke="#0A0A0C"/>}
+                            </button>
+                            {/* Tap = attach/replace an optional photo */}
+                            <label style={{position:"absolute",bottom:-4,right:-4,width:16,height:16,
+                              borderRadius:"50%",cursor:"pointer",
+                              background:s.photo?palette.color:"rgba(20,20,24,0.95)",
+                              border:`1.5px solid ${s.photo?palette.color:"rgba(255,255,255,0.25)"}`,
+                              display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              {uploading?(
+                                <div style={{width:7,height:7,border:"1.5px solid rgba(255,255,255,0.3)",
+                                  borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+                              ):(
+                                <Icon d={Icons.camera} size={8} stroke={s.photo?"#0A0A0C":"rgba(255,255,255,0.6)"}/>
+                              )}
                               <input type="file" accept="image/*" style={{display:"none"}}
                                 disabled={uploading} onChange={e=>handleStepPhoto(s,e)}/>
-                            )}
-                          </label>
-                          <span style={{fontSize:9.5,fontWeight:isCurrent?700:500,
-                            color:s.completed?"rgba(255,255,255,0.4)":isCurrent?palette.color:"rgba(255,255,255,0.28)",
-                            marginTop:7,textAlign:"center",maxWidth:70,letterSpacing:"0.02em",
+                            </label>
+                          </div>
+                          <span style={{fontSize:9.5,fontWeight:s.completed?500:600,
+                            color:s.completed?"rgba(255,255,255,0.4)":"rgba(255,255,255,0.6)",
+                            marginTop:8,textAlign:"center",maxWidth:70,letterSpacing:"0.02em",
                             textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",
                             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             {s.title}
                           </span>
                         </div>
                         {!isLast&&(
-                          <div style={{height:2,width:32,marginTop:10,flexShrink:0,
+                          <div style={{height:2,width:32,marginTop:12,flexShrink:0,
                             background:s.completed?palette.color:"rgba(255,255,255,0.12)",
                             transition:"background 0.3s ease"}}/>
                         )}
@@ -1660,28 +1709,26 @@ function QuestCard({quest,members,onEdit,onDelete,index}){
                 </div>
               </div>
 
-              {/* Current step's action, spelled out below the compact stepper */}
-              {firstIncompleteIdx!==-1&&(
-                <p style={{fontSize:11.5,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",
-                  margin:completedPhotos.length>0?"0 0 14px":"0 0 2px"}}>
-                  Tap the highlighted dot to complete <span style={{color:palette.color,fontWeight:700}}>
-                  {steps[firstIncompleteIdx].title}</span> with a photo.
-                </p>
-              )}
-
-              {/* Proof gallery — thumbnails from every completed step */}
+              {/* Proof gallery — thumbnails from every step with a photo, tap to expand */}
               {completedPhotos.length>0&&(
                 <div style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
                   {completedPhotos.map(s=>(
-                    <img key={s.id} src={s.photo} alt="" title={s.title} style={{
-                      width:64,height:64,borderRadius:10,objectFit:"cover",flexShrink:0,
-                      border:`1px solid ${palette.color}35`}}/>
+                    <button key={s.id} onClick={()=>setExpandedStepPhoto(s)} style={{
+                      width:64,height:64,borderRadius:10,flexShrink:0,padding:0,cursor:"zoom-in",
+                      border:`1px solid ${palette.color}35`,overflow:"hidden"}}>
+                      <img src={s.photo} alt="" title={s.title} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
             );
           })()}
+
+          {expandedStepPhoto&&(
+            <PhotoLightbox photo={expandedStepPhoto.photo} title={expandedStepPhoto.title}
+              subtitle="Step proof photo" onClose={()=>setExpandedStepPhoto(null)}/>
+          )}
 
           {quest.emoji&&(
             <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
@@ -1866,6 +1913,14 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
     setNewStepTitle("");
   };
   const removeStep = (idx) => setSteps(s=>s.filter((_,i)=>i!==idx));
+  const moveStep = (idx, dir) => setSteps(s=>{
+    const target = idx+dir;
+    if(target<0||target>=s.length) return s;
+    const copy=[...s];
+    [copy[idx],copy[target]]=[copy[target],copy[idx]];
+    return copy;
+  });
+  const [expandedStepPhoto,setExpandedStepPhoto]=useState(null);
 
   const handleSave=async()=>{
     if(!form.title.trim()) return;
@@ -2054,40 +2109,66 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
           {steps.length>0&&(
             <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
               {steps.map((s,i)=>(
-                <div key={s.id||i} style={{display:"flex",alignItems:"center",gap:10,
-                  padding:"9px 12px",borderRadius:10,
+                <div key={s.id||i} style={{display:"flex",alignItems:"center",gap:8,
+                  padding:"9px 10px",borderRadius:10,
                   background:s.completed?"rgba(168,255,120,0.06)":"rgba(255,255,255,0.04)",
                   border:`1px solid ${s.completed?"rgba(168,255,120,0.2)":"rgba(255,255,255,0.08)"}`}}>
-                  {/* Tap the marker to complete this step with a photo — right here, no need to leave the form */}
-                  <label style={{width:24,height:24,borderRadius:"50%",flexShrink:0,cursor:"pointer",
+                  {/* Reorder */}
+                  <div style={{display:"flex",flexDirection:"column",flexShrink:0}}>
+                    <button type="button" onClick={()=>moveStep(i,-1)} disabled={i===0} style={{
+                      background:"none",border:"none",cursor:i===0?"default":"pointer",
+                      color:i===0?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.4)",padding:0,height:12}}>
+                      <Icon d={Icons.chevron} size={11} stroke="currentColor" fill="none"
+                        style={{transform:"rotate(180deg)"}}/>
+                    </button>
+                    <button type="button" onClick={()=>moveStep(i,1)} disabled={i===steps.length-1} style={{
+                      background:"none",border:"none",cursor:i===steps.length-1?"default":"pointer",
+                      color:i===steps.length-1?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.4)",padding:0,height:12}}>
+                      <Icon d={Icons.chevron} size={11} stroke="currentColor"/>
+                    </button>
+                  </div>
+
+                  {/* Tap = toggle complete, no photo required */}
+                  <button type="button" onClick={()=>{
+                    setSteps(prev=>prev.map((st,idx)=>idx===i
+                      ?{...st,completed:!st.completed,completed_at:!st.completed?new Date().toISOString():st.completed_at}
+                      :st));
+                  }} style={{width:22,height:22,borderRadius:"50%",flexShrink:0,cursor:"pointer",padding:0,
                     background:s.completed?"rgba(168,255,120,0.2)":"rgba(255,255,255,0.06)",
                     border:`1.5px solid ${s.completed?"#A8FF78":"rgba(255,255,255,0.2)"}`,
-                    display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:10,fontWeight:700,color:s.completed?"#A8FF78":"rgba(255,255,255,0.3)"}}>
-                    {s.completed?<Icon d={Icons.check} size={11} stroke="#A8FF78"/>:(i+1)}
+                    display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {s.completed&&<Icon d={Icons.check} size={11} stroke="#A8FF78"/>}
+                  </button>
+
+                  <span style={{flex:1,fontSize:13,color:s.completed?"rgba(255,255,255,0.5)":"#F0F0F0",
+                    fontFamily:"'DM Sans',sans-serif",textDecoration:s.completed?"line-through":"none",
+                    minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {s.title}
+                  </span>
+
+                  {/* Optional photo — attach, replace, or tap to view full size */}
+                  {s.photo?(
+                    <button type="button" onClick={()=>setExpandedStepPhoto(s)} style={{
+                      padding:0,border:"none",cursor:"zoom-in",flexShrink:0,borderRadius:7,overflow:"hidden"}}>
+                      <img src={s.photo} alt="" style={{width:28,height:28,objectFit:"cover",display:"block",
+                        border:"1px solid rgba(168,255,120,0.3)"}}/>
+                    </button>
+                  ):null}
+                  <label style={{display:"flex",alignItems:"center",justifyContent:"center",
+                    width:26,height:26,borderRadius:8,cursor:"pointer",flexShrink:0,
+                    background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)"}}>
+                    <Icon d={Icons.camera} size={12} stroke="rgba(255,255,255,0.4)"/>
                     <input type="file" accept="image/*" style={{display:"none"}}
                       onChange={e=>{
                         const file=e.target.files?.[0]; if(!file) return;
                         const reader=new FileReader();
                         reader.onload=(ev)=>{
-                          setSteps(prev=>prev.map((st,idx)=>idx===i
-                            ?{...st,photo:ev.target.result,completed:true,completed_at:st.completed_at||new Date().toISOString()}
-                            :st));
+                          setSteps(prev=>prev.map((st,idx)=>idx===i?{...st,photo:ev.target.result}:st));
                         };
                         reader.readAsDataURL(file);
                       }}/>
                   </label>
-                  <span style={{flex:1,fontSize:13,color:s.completed?"rgba(255,255,255,0.5)":"#F0F0F0",
-                    fontFamily:"'DM Sans',sans-serif",textDecoration:s.completed?"line-through":"none"}}>
-                    {s.title}
-                  </span>
-                  {s.photo?(
-                    <img src={s.photo} alt="" style={{width:28,height:28,borderRadius:7,
-                      objectFit:"cover",flexShrink:0,border:"1px solid rgba(168,255,120,0.3)"}}/>
-                  ):(
-                    <span style={{fontSize:9.5,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",
-                      fontStyle:"italic",flexShrink:0}}>tap ○ for photo</span>
-                  )}
+
                   <button type="button" onClick={()=>removeStep(i)} style={{background:"none",
                     border:"none",cursor:"pointer",color:"rgba(255,255,255,0.25)",padding:2,flexShrink:0}}>
                     <Icon d={Icons.x} size={13}/>
@@ -2095,6 +2176,10 @@ function QuestModal({quest,onSave,onClose,friends=[]}){
                 </div>
               ))}
             </div>
+          )}
+          {expandedStepPhoto&&(
+            <PhotoLightbox photo={expandedStepPhoto.photo} title={expandedStepPhoto.title}
+              subtitle="Step proof photo" onClose={()=>setExpandedStepPhoto(null)}/>
           )}
           <div style={{display:"flex",gap:8}}>
             <input value={newStepTitle} onChange={e=>setNewStepTitle(e.target.value)}
@@ -5321,7 +5406,7 @@ function MemoriesPage({ user }) {
             </p>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {dayGroups.map(({date,mems})=>{
-                const photos = mems.filter(m=>m.photo).map(m=>m.photo);
+                const photos = mems.flatMap(m=>m.photos?.length?m.photos:(m.photo?[m.photo]:[]));
                 const primary = mems[0];
                 const multi = mems.length>1;
                 return (
@@ -5466,19 +5551,41 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
               <div style={{textAlign:"center",padding:"20px 0",color:"rgba(255,255,255,0.2)",
                 fontSize:14,fontFamily:"'DM Sans',sans-serif"}}>No moments yet. Add your first!</div>
             )}
-            {dayMemories.map(m=>(
+            {dayMemories.map(m=>{
+              const mPhotos = m.photos?.length ? m.photos : (m.photo ? [m.photo] : []);
+              return(
               <div key={m.id} style={{background:"rgba(192,132,252,0.06)",
                 border:"1px solid rgba(192,132,252,0.15)",borderRadius:14,overflow:"hidden"}}>
-                {m.photo&&(
-                  <button onClick={()=>setExpandedPhoto(m)} style={{
+                {mPhotos.length===1&&(
+                  <button onClick={()=>setExpandedPhoto({memory:m,idx:0})} style={{
                     width:"100%",height:140,padding:0,border:"none",cursor:"zoom-in",
                     display:"block",position:"relative"}}>
-                    <img src={m.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    <img src={mPhotos[0]} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                     <div style={{position:"absolute",bottom:6,right:6,background:"rgba(0,0,0,0.55)",
                       borderRadius:7,padding:"3px 6px",display:"flex",alignItems:"center",gap:3}}>
                       <Icon d={Icons.search} size={10} stroke="rgba(255,255,255,0.8)"/>
                     </div>
                   </button>
+                )}
+                {mPhotos.length>1&&(
+                  <div style={{display:"grid",
+                    gridTemplateColumns:mPhotos.length===2?"1fr 1fr":"1fr 1fr 1fr",
+                    gap:2,padding:2}}>
+                    {mPhotos.slice(0,6).map((p,pi)=>(
+                      <button key={pi} onClick={()=>setExpandedPhoto({memory:m,idx:pi})} style={{
+                        position:"relative",aspectRatio:"1",padding:0,border:"none",cursor:"zoom-in",
+                        overflow:"hidden",borderRadius:8}}>
+                        <img src={p} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                        {pi===5&&mPhotos.length>6&&(
+                          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",
+                            display:"flex",alignItems:"center",justifyContent:"center",
+                            fontSize:14,fontWeight:700,color:"#fff",fontFamily:"'DM Sans',sans-serif"}}>
+                            +{mPhotos.length-6}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 )}
                 <div style={{padding:"12px 14px",display:"flex",alignItems:"flex-start",gap:10}}>
                   {m.emoji&&<span style={{fontSize:20,flexShrink:0}}>{m.emoji}</span>}
@@ -5496,7 +5603,8 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
             <button onClick={()=>{setEditing(null);setView("add");}} style={{
               display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",
               borderRadius:14,border:"1px dashed rgba(192,132,252,0.3)",
@@ -5517,7 +5625,7 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
       </div>
 
       {expandedPhoto&&(
-        <MemoryPhotoLightbox memory={expandedPhoto} onClose={()=>setExpandedPhoto(null)}/>
+        <MemoryPhotoLightbox memory={expandedPhoto.memory} startIndex={expandedPhoto.idx||0} onClose={()=>setExpandedPhoto(null)}/>
       )}
     </div>,
     document.body
@@ -5568,10 +5676,13 @@ function PhotoLightbox({ photo, title, subtitle, onClose }) {
   );
 }
 
-function MemoryPhotoLightbox({ memory, onClose }) {
+function MemoryPhotoLightbox({ memory, startIndex=0, onClose }) {
   const [visible, setVisible] = useState(false);
+  const photos = memory.photos?.length ? memory.photos : (memory.photo ? [memory.photo] : []);
+  const [idx, setIdx] = useState(Math.min(startIndex, Math.max(photos.length-1,0)));
   useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); },[]);
   const close=()=>{ setVisible(false); setTimeout(onClose,200); };
+  const hasMultiple = photos.length>1;
 
   return createPortal(
     <div style={{position:"fixed",inset:0,zIndex:10001,
@@ -5580,7 +5691,13 @@ function MemoryPhotoLightbox({ memory, onClose }) {
       opacity:visible?1:0}}
       onClick={e=>e.target===e.currentTarget&&close()}>
 
-      <div style={{display:"flex",justifyContent:"flex-end",padding:"20px 20px 0",flexShrink:0}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+        padding:"20px 20px 0",flexShrink:0}}>
+        {hasMultiple?(
+          <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",
+            fontFamily:"'DM Sans',sans-serif",background:"rgba(255,255,255,0.08)",
+            borderRadius:8,padding:"6px 10px"}}>{idx+1} / {photos.length}</span>
+        ):<div/>}
         <button onClick={close} style={{background:"rgba(255,255,255,0.08)",
           border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"8px 9px",
           cursor:"pointer",color:"rgba(255,255,255,0.7)"}}>
@@ -5588,15 +5705,43 @@ function MemoryPhotoLightbox({ memory, onClose }) {
         </button>
       </div>
 
-      {/* Full, uncropped image */}
+      {/* Full, uncropped image with paging if there's more than one */}
       <div style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",
-        padding:"8px 16px",overflow:"hidden"}}
+        padding:"8px 16px",overflow:"hidden",position:"relative"}}
         onClick={e=>e.target===e.currentTarget&&close()}>
-        <img src={memory.photo} alt="" style={{
+        {hasMultiple&&idx>0&&(
+          <button onClick={()=>setIdx(i=>i-1)} style={{position:"absolute",left:8,zIndex:1,
+            background:"rgba(0,0,0,0.5)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"50%",
+            width:38,height:38,cursor:"pointer",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Icon d={Icons.chevron} size={16} stroke="currentColor" style={{transform:"rotate(-90deg)"}}/>
+          </button>
+        )}
+        <img src={photos[idx]} alt="" style={{
           maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12,
           boxShadow:"0 12px 48px rgba(0,0,0,0.6)",
           transform:visible?"scale(1)":"scale(0.94)",transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)"}}/>
+        {hasMultiple&&idx<photos.length-1&&(
+          <button onClick={()=>setIdx(i=>i+1)} style={{position:"absolute",right:8,zIndex:1,
+            background:"rgba(0,0,0,0.5)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"50%",
+            width:38,height:38,cursor:"pointer",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Icon d={Icons.chevron} size={16} stroke="currentColor" style={{transform:"rotate(90deg)"}}/>
+          </button>
+        )}
       </div>
+
+      {/* Thumbnail strip when there's more than one photo */}
+      {hasMultiple&&(
+        <div style={{display:"flex",gap:6,padding:"0 20px 12px",overflowX:"auto",
+          WebkitOverflowScrolling:"touch",flexShrink:0}}>
+          {photos.map((p,i)=>(
+            <button key={i} onClick={()=>setIdx(i)} style={{
+              width:44,height:44,borderRadius:8,flexShrink:0,padding:0,cursor:"pointer",overflow:"hidden",
+              border:`2px solid ${i===idx?"#C084FC":"rgba(255,255,255,0.15)"}`,opacity:i===idx?1:0.5}}>
+              <img src={p} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Title + description */}
       <div style={{flexShrink:0,padding:"16px 22px calc(env(safe-area-inset-bottom,0px) + 22px)",
@@ -5622,14 +5767,38 @@ function MemoryPhotoLightbox({ memory, onClose }) {
 function MemoryForm({ initial, date, onSave }) {
   const [title,setTitle] = useState(initial?.title||"");
   const [note,setNote]   = useState(initial?.note||"");
-  const [photo,setPhoto] = useState(initial?.photo||null);
+  // Multiple photos — falls back to the old single `photo` field for entries saved before this existed
+  const [photos,setPhotos] = useState(
+    initial?.photos?.length ? initial.photos : (initial?.photo ? [initial.photo] : [])
+  );
   const [emoji,setEmoji] = useState(initial?.emoji||"");
   const [saving,setSaving] = useState(false);
   const QUICK = ["😊","🥳","😔","🌟","❤","🔥","🌙","✈","🍕","🎵","💪","🤝","🌿","🎉","🫂"];
-  const handlePhoto=(e)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>setPhoto(ev.target.result);r.readAsDataURL(f);};
+
+  const handlePhotos=(e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(!files.length) return;
+    files.forEach(f=>{
+      const r=new FileReader();
+      r.onload=(ev)=>setPhotos(prev=>[...prev, ev.target.result]);
+      r.readAsDataURL(f);
+    });
+    e.target.value=""; // allow re-selecting the same file(s) again later
+  };
+  const removePhoto = (idx) => setPhotos(prev=>prev.filter((_,i)=>i!==idx));
+
   const inp={width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"11px 14px",color:"#F0F0F0",fontSize:14,outline:"none",fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box"};
   const lbl={fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:7,display:"block"};
-  const save=async()=>{setSaving(true);await onSave({id:initial?.id||crypto.randomUUID(),date,title:title.trim()||"Moment",note:note.trim(),photo,emoji,created_at:initial?.created_at||new Date().toISOString()});setSaving(false);};
+  const save=async()=>{
+    setSaving(true);
+    await onSave({
+      id:initial?.id||crypto.randomUUID(), date,
+      title:title.trim()||"Moment", note:note.trim(),
+      photo:photos[0]||null, photos, emoji,
+      created_at:initial?.created_at||new Date().toISOString(),
+    });
+    setSaving(false);
+  };
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div><label style={lbl}>Vibe</label>
@@ -5639,19 +5808,31 @@ function MemoryForm({ initial, date, onSave }) {
       </div>
       <div><label style={lbl}>Title</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="What happened?" style={inp}/></div>
       <div><label style={lbl}>Note</label><textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="A few words…" rows={3} style={{...inp,resize:"vertical",lineHeight:1.6}}/></div>
-      <div><label style={lbl}>Photo</label>
-        {photo?(
-          <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
-            <img src={photo} alt="" style={{width:"100%",display:"block",maxHeight:160,objectFit:"cover"}}/>
-            <button onClick={()=>setPhoto(null)} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.7)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"#fff",fontSize:12}}>Remove</button>
+      <div>
+        <label style={lbl}>Photos {photos.length>0&&`(${photos.length})`}</label>
+        {photos.length>0&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+            {photos.map((p,i)=>(
+              <div key={i} style={{position:"relative",aspectRatio:"1",borderRadius:10,overflow:"hidden",
+                border:"1px solid rgba(255,255,255,0.1)"}}>
+                <img src={p} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                <button onClick={()=>removePhoto(i)} style={{position:"absolute",top:4,right:4,
+                  background:"rgba(0,0,0,0.7)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"50%",
+                  width:20,height:20,cursor:"pointer",color:"#fff",fontSize:11,display:"flex",
+                  alignItems:"center",justifyContent:"center",padding:0}}>
+                  <Icon d={Icons.x} size={11}/>
+                </button>
+              </div>
+            ))}
           </div>
-        ):(
-          <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:12,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px dashed rgba(255,255,255,0.12)"}}>
-            <Icon d={Icons.camera} size={16} stroke="rgba(255,255,255,0.4)"/>
-            <span style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>Add photo</span>
-            <input type="file" accept="image/*" style={{display:"none"}} onChange={handlePhoto}/>
-          </label>
         )}
+        <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:12,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px dashed rgba(255,255,255,0.12)"}}>
+          <Icon d={Icons.camera} size={16} stroke="rgba(255,255,255,0.4)"/>
+          <span style={{fontSize:13,color:"rgba(255,255,255,0.4)",fontFamily:"'DM Sans',sans-serif"}}>
+            {photos.length>0?"Add more photos":"Add photo(s)"}
+          </span>
+          <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={handlePhotos}/>
+        </label>
       </div>
       <button onClick={save} disabled={saving} style={{padding:"14px",borderRadius:12,background:"linear-gradient(135deg,#C084FC,#818CF8)",color:"#fff",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,fontFamily:"'DM Sans',sans-serif",opacity:saving?0.7:1}}>
         {saving?"Saving…":initial?"Update Moment":"Save Moment"}
