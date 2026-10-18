@@ -5165,12 +5165,21 @@ function JournalPage({ user, quests, onEditQuest, onShareQuest }) {
   const [anchor, setAnchor]           = useState(new Date());
   const [showAllDone, setShowAllDone] = useState(false);
   const [showAllMems, setShowAllMems] = useState(false);
+  const [memStatus, setMemStatus] = useState("loading"); // diagnostic text
 
   const today    = new Date();
   const todayKey = dayKey(today);
 
   useEffect(()=>{
-    sb.getMemories(user.id).then(m=>setMemories(Array.isArray(m)?m:[])).catch(()=>{});
+    (async()=>{
+      try{
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${user.id}&select=*`, {headers:sb.h});
+        const d = await r.json();
+        if(!r.ok){ setMemStatus(`Error ${r.status}: ${d?.message||d?.hint||"could not load"}`); return; }
+        setMemories(Array.isArray(d)?d:[]);
+        setMemStatus(`ok:${Array.isArray(d)?d.length:0}`);
+      }catch(e){ setMemStatus("Error: "+(e?.message||"network")); }
+    })();
   },[]);
 
   // Everything indexed by local calendar day
@@ -5398,6 +5407,16 @@ function JournalPage({ user, quests, onEditQuest, onShareQuest }) {
         </div>
       </div>
 
+      {memStatus!=="loading"&&!memStatus.startsWith("ok:")&&(
+        <div style={{...card,borderColor:"rgba(255,100,100,0.3)",color:"#FF9B9B",fontSize:12,fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}>
+          Couldn't load memories — {memStatus}
+        </div>
+      )}
+      {memStatus==="ok:0"&&(
+        <div style={{...card,color:"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}>
+          No memories found for this account (user {String(user.id).slice(0,8)}…). If you had memories before, they may be saved under a different login.
+        </div>
+      )}
       {/* ── All memories, newest first ── */}
       {memories.length>0&&(
         <div style={card}>
