@@ -5164,6 +5164,7 @@ function JournalPage({ user, quests, onEditQuest, onShareQuest }) {
   const [period, setPeriod]           = useState("month"); // week | month | year
   const [anchor, setAnchor]           = useState(new Date());
   const [showAllDone, setShowAllDone] = useState(false);
+  const [showAllMems, setShowAllMems] = useState(false);
 
   const today    = new Date();
   const todayKey = dayKey(today);
@@ -5396,6 +5397,47 @@ function JournalPage({ user, quests, onEditQuest, onShareQuest }) {
           <span style={{marginLeft:"auto"}}>Tap a day to see everything</span>
         </div>
       </div>
+
+      {/* ── All memories, newest first ── */}
+      {memories.length>0&&(
+        <div style={card}>
+          <p style={{...sec,marginBottom:12}}>Memories · {memories.length}</p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {[...memories].sort((x,y)=>(y.date||"").localeCompare(x.date||"")).slice(0,showAllMems?memories.length:6).map(m=>{
+              const ph=memPhotoList(m);
+              return(
+                <button key={m.id} onClick={()=>setSelectedDate(m.date)} style={{
+                  display:"flex",alignItems:"center",gap:12,padding:10,borderRadius:14,textAlign:"left",
+                  cursor:"pointer",background:"rgba(192,132,252,0.06)",border:"1px solid rgba(192,132,252,0.15)"}}>
+                  {ph[0]?(
+                    <img src={ph[0]} alt="" style={{width:52,height:52,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
+                  ):(
+                    <div style={{width:52,height:52,borderRadius:10,flexShrink:0,display:"flex",alignItems:"center",
+                      justifyContent:"center",fontSize:22,background:"rgba(192,132,252,0.12)"}}>{m.emoji||"📸"}</div>
+                  )}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",fontFamily:"'Cormorant Garamond',serif",
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title||"Moment"}</div>
+                    {m.note&&<div style={{fontSize:11.5,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{m.note}</div>}
+                    <div style={{fontSize:10.5,color:"rgba(192,132,252,0.7)",fontFamily:"'DM Sans',sans-serif",marginTop:3}}>
+                      {m.date&&parseDayKey(m.date).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}
+                      {ph.length>1?` · ${ph.length} photos`:""}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {memories.length>6&&(
+            <button onClick={()=>setShowAllMems(v=>!v)} style={{marginTop:8,background:"none",border:"none",
+              cursor:"pointer",color:"rgba(255,255,255,0.4)",fontSize:12,fontWeight:600,
+              fontFamily:"'DM Sans',sans-serif",padding:"4px 0"}}>
+              {showAllMems?"Show less":`Show all ${memories.length}`}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Recap: week / month / year ── */}
       <div style={card}>
