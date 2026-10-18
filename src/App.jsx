@@ -3045,7 +3045,8 @@ function FriendsPage({ user, quests, members=[], onAddToQuest, onFriendsLoaded }
   const [error, setError]       = useState("");
   const [success, setSuccess]   = useState("");
   const [openFriend, setOpenFriend] = useState(null);
-  const [view, setView]         = useState("friends"); // friends | leaderboard
+  const [view, setView]         = useState("feed"); // feed | leaderboard | people
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const userXP = calcXP(quests);
 
   const load = async() => {
@@ -3058,6 +3059,7 @@ function FriendsPage({ user, quests, members=[], onAddToQuest, onFriendsLoaded }
       if(onFriendsLoaded) onFriendsLoaded(data.friends||[]);
     } catch(e) { console.error(e); }
     setLoading(false);
+    setLoadedOnce(true);
   };
 
   useEffect(()=>{
@@ -3090,22 +3092,56 @@ function FriendsPage({ user, quests, members=[], onAddToQuest, onFriendsLoaded }
 
   return (
     <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 0"}}>
-      <div style={{marginBottom:20}}>
+      <div style={{marginBottom:14}}>
         <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
-          color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Adventure</p>
-        <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
+          color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Circle</p>
+        <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",margin:0,
           background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
-          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:16}}>
-          Friends & Rank
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
+          Friends
         </h2>
-        {/* Rank card */}
-        <RankBadge xp={userXP} size="lg"/>
       </div>
 
-      {/* Friends / Leaderboard toggle */}
+      {/* Friends shelf */}
+      <div style={{display:"flex",gap:14,overflowX:"auto",WebkitOverflowScrolling:"touch",
+        padding:"4px 2px 14px",marginBottom:6,scrollbarWidth:"none"}}>
+        <button onClick={()=>setView("people")} style={{flexShrink:0,background:"none",border:"none",cursor:"pointer",
+          display:"flex",flexDirection:"column",alignItems:"center",gap:6,width:64,position:"relative"}}>
+          <div style={{width:56,height:56,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+            border:"1.5px dashed rgba(255,255,255,0.25)",color:"rgba(255,255,255,0.6)",fontSize:24}}>+</div>
+          {incoming.length>0&&(
+            <span style={{position:"absolute",top:-2,right:2,minWidth:18,height:18,borderRadius:9,background:"#FFD478",
+              color:"#0A0A0C",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",
+              padding:"0 4px",fontFamily:"'DM Sans',sans-serif"}}>{incoming.length}</span>
+          )}
+          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",fontFamily:"'DM Sans',sans-serif"}}>
+            {incoming.length>0?"Requests":"Add"}
+          </span>
+        </button>
+        {friends.map(f=>{
+          const {avatar,color}=getCharacter(f.name||"?");
+          return(
+            <button key={f.id||f.user_id} onClick={()=>setOpenFriend(f)} style={{flexShrink:0,background:"none",border:"none",
+              cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6,width:64}}>
+              <div style={{width:56,height:56,borderRadius:"50%",padding:2.5,
+                background:`conic-gradient(${color},${color}66,${color})`}}>
+                <div style={{width:"100%",height:"100%",borderRadius:"50%",overflow:"hidden",border:"2px solid #0A0A0C",
+                  background:f.photo?"#0A0A0C":`radial-gradient(circle at 35% 35%,${color}40,${color}12)`,
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>
+                  {f.photo?<img src={f.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+                </div>
+              </div>
+              <span style={{fontSize:10.5,color:"rgba(255,255,255,0.6)",fontFamily:"'DM Sans',sans-serif",maxWidth:64,
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(f.name||"").split(" ")[0]}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Feed / Ranks / People toggle */}
       <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:12,
-        padding:4,gap:4,marginBottom:20}}>
-        {[{id:"friends",label:"Friends"},{id:"leaderboard",label:"Leaderboard"}].map(v=>(
+        padding:4,gap:4,marginBottom:18}}>
+        {[{id:"feed",label:"Feed"},{id:"leaderboard",label:"Ranks"},{id:"people",label:"People"}].map(v=>(
           <button key={v.id} onClick={()=>setView(v.id)} style={{
             flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",
             background:view===v.id?"rgba(255,255,255,0.1)":"transparent",
@@ -3117,11 +3153,16 @@ function FriendsPage({ user, quests, members=[], onAddToQuest, onFriendsLoaded }
         ))}
       </div>
 
-      {view==="leaderboard"&&(
-        <LeaderboardView user={user} friends={friends} quests={quests} members={members}/>
+      {view==="feed"&&(
+        <ActivityFeedPage user={user} friends={friends} ready={loadedOnce} onOpenFriend={setOpenFriend}/>
       )}
 
-      {view==="friends"&&(<>
+      {view==="leaderboard"&&(<>
+        <div style={{marginBottom:16}}><RankBadge xp={userXP} size="lg"/></div>
+        <LeaderboardView user={user} friends={friends} quests={quests} members={members}/>
+      </>)}
+
+      {view==="people"&&(<>
 
       {/* Incoming requests */}
       {incoming.length>0&&(
@@ -3514,16 +3555,208 @@ function FriendQuestProgress({ questId, color }) {
 }
 
 
-// ─── ACTIVITY FEED — friends' progress on quests they've made public ─────────
+// ─── FRIENDS FEED — Instagram-style timeline of friends' public quests ───────
 // Privacy is enforced by the database itself: getFriendPublicQuests and
-// getQuestSteps are both gated by RLS to (is_public = true AND is_friend(...)),
-// so a private quest's steps are structurally invisible here — not just hidden
-// in the UI. There is no path for this feed to ever see private progress.
-function ActivityFeedPage({ user, friends }) {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+// getQuestSteps are gated by RLS to (is_public = true AND friend), so private
+// progress is structurally invisible here — not just hidden in the UI.
+const FEED_REACTIONS = ["🔥","❤","👏","😮","😂","💀"];
+const myDisplayName = (user) => sb.getUser()?.name || (()=>{try{return localStorage.getItem("sq_name");}catch{return null;}})() || user?.email?.split("@")[0] || "Someone";
+
+function FeedAvatar({ person, size=38 }) {
+  const {avatar,color} = getCharacter(person?.name||"?");
+  return(
+    <div style={{width:size,height:size,borderRadius:size*0.3,flexShrink:0,overflow:"hidden",
+      background:person?.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
+      border:`1.5px solid ${color}45`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.47}}>
+      {person?.photo?<img src={person.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
+    </div>
+  );
+}
+
+function FeedPost({ ev, user, reactions, comments, onReact, onComment, onDeleteComment, onOpenFriend }) {
+  const [showComments, setShowComments] = useState(false);
+  const [showPicker, setShowPicker]     = useState(false);
+  const [draft, setDraft]               = useState("");
+  const [posting, setPosting]           = useState(false);
+  const [zoom, setZoom]                 = useState(false);
+  const q = ev.quest;
+  const palette = getPalette(q.id, q.color_index);
+  const mine = reactions.filter(r=>r.user_id===user.id).map(r=>r.emoji);
+  const counts = FEED_REACTIONS.map(e=>({e,n:reactions.filter(r=>r.emoji===e).length})).filter(x=>x.n>0);
+  const total = reactions.length;
+  const kudosOn = mine.includes("🔥");
+
+  const verb = ev.type==="quest_complete" ? "completed a quest"
+             : ev.type==="quest_start"    ? "started a quest"
+             : "made progress";
+
+  const send = async()=>{
+    if(!draft.trim()||posting) return;
+    setPosting(true);
+    try{ await onComment(q.id, draft.trim()); setDraft(""); }catch(e){ console.error(e); }
+    setPosting(false);
+  };
+
+  return(
+    <article style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",
+      borderRadius:22,overflow:"hidden",marginBottom:18}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px"}}>
+        <button onClick={()=>onOpenFriend(ev.friend)} style={{background:"none",border:"none",padding:0,cursor:"pointer",display:"flex"}}>
+          <FeedAvatar person={ev.friend}/>
+        </button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#F2F2F2",fontFamily:"'Cormorant Garamond',serif"}}>{ev.friend.name}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
+            {verb} · {timeAgo(ev.timestamp)}
+          </div>
+        </div>
+        {ev.type==="quest_complete"&&(
+          <span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",
+            color:"#A8FF78",background:"rgba(168,255,120,0.12)",border:"1px solid rgba(168,255,120,0.3)",
+            borderRadius:6,padding:"3px 8px",fontFamily:"'DM Sans',sans-serif"}}>Done</span>
+        )}
+        {ev.type==="quest_start"&&(
+          <span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",
+            color:"#78C1FF",background:"rgba(120,193,255,0.12)",border:"1px solid rgba(120,193,255,0.3)",
+            borderRadius:6,padding:"3px 8px",fontFamily:"'DM Sans',sans-serif"}}>Started</span>
+        )}
+      </div>
+
+      {/* Media */}
+      {ev.photo?(
+        <button onClick={()=>setZoom(true)} style={{display:"block",width:"100%",padding:0,border:"none",cursor:"zoom-in",background:"#000"}}>
+          <img src={ev.photo} alt="" style={{width:"100%",maxHeight:420,objectFit:"cover",display:"block"}}/>
+        </button>
+      ):(
+        <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,
+          background:`linear-gradient(135deg,${palette.color}30,${palette.color}08)`}}>
+          {q.emoji||"🔥"}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"10px 12px 0"}}>
+        <button onClick={()=>onReact(q.id,"🔥")} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",
+          borderRadius:20,border:"none",cursor:"pointer",
+          background:kudosOn?"rgba(251,191,36,0.16)":"rgba(255,255,255,0.05)",
+          outline:kudosOn?"1px solid rgba(251,191,36,0.4)":"none",
+          transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}>
+          <span style={{fontSize:17,filter:kudosOn?"none":"grayscale(0.7)"}}>🔥</span>
+          <span style={{fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+            color:kudosOn?"#FBBF24":"rgba(255,255,255,0.5)"}}>Kudos</span>
+        </button>
+        <button onClick={()=>setShowComments(v=>!v)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",
+          borderRadius:20,border:"none",cursor:"pointer",
+          background:showComments?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.05)"}}>
+          <span style={{fontSize:15}}>💬</span>
+          <span style={{fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif",color:"rgba(255,255,255,0.5)"}}>
+            {comments.length>0?comments.length:"Comment"}
+          </span>
+        </button>
+        <button onClick={()=>setShowPicker(v=>!v)} style={{marginLeft:"auto",width:32,height:32,borderRadius:"50%",
+          border:"none",cursor:"pointer",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.5)",fontSize:16}}>
+          {showPicker?"×":"☺"}
+        </button>
+      </div>
+
+      {showPicker&&(
+        <div style={{display:"flex",gap:6,padding:"8px 12px 0",flexWrap:"wrap"}}>
+          {FEED_REACTIONS.map(e=>(
+            <button key={e} onClick={()=>onReact(q.id,e)} style={{fontSize:20,padding:"5px 9px",borderRadius:12,border:"none",
+              cursor:"pointer",background:mine.includes(e)?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.05)",
+              outline:mine.includes(e)?"1px solid rgba(255,255,255,0.25)":"none"}}>{e}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Caption */}
+      <div style={{padding:"10px 14px 14px"}}>
+        {total>0&&(
+          <div style={{fontSize:11.5,color:"rgba(255,255,255,0.45)",fontFamily:"'DM Sans',sans-serif",marginBottom:6}}>
+            {counts.map(x=>`${x.e} ${x.n}`).join("  ")}
+          </div>
+        )}
+        <div style={{fontSize:14,lineHeight:1.45,color:"rgba(255,255,255,0.85)",fontFamily:"'DM Sans',sans-serif"}}>
+          <span style={{fontWeight:700,color:"#fff"}}>{ev.friend.name}</span>{" "}
+          {ev.type==="step"?(
+            <>checked off <span style={{fontWeight:600}}>{ev.step.title}</span> on </>
+          ):null}
+          <span style={{fontWeight:700,color:palette.color}}>{q.emoji} {q.title}</span>
+        </div>
+        {q.location?.name&&(
+          <div style={{fontSize:11.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",marginTop:3}}>📍 {q.location.name}</div>
+        )}
+        {ev.type==="step"&&ev.progress&&(
+          <div style={{marginTop:8}}>
+            <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.07)",overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${ev.progress.total?Math.round(ev.progress.done/ev.progress.total*100):0}%`,
+                background:palette.color,borderRadius:2}}/>
+            </div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",marginTop:4}}>
+              {ev.progress.done}/{ev.progress.total} steps
+            </div>
+          </div>
+        )}
+
+        {/* Comments */}
+        {!showComments&&comments.length>0&&(
+          <button onClick={()=>setShowComments(true)} style={{background:"none",border:"none",padding:0,marginTop:8,cursor:"pointer",
+            fontSize:12,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif"}}>
+            View {comments.length} comment{comments.length!==1?"s":""}
+          </button>
+        )}
+        {showComments&&(
+          <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:9}}>
+            {comments.map(c=>{
+              const canDelete = c.user_id===user.id || q.user_id===user.id;
+              return(
+                <div key={c.id} style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                  <FeedAvatar person={{name:c.author_name}} size={26}/>
+                  <div style={{flex:1,minWidth:0,fontSize:13,lineHeight:1.4,color:"rgba(255,255,255,0.8)",fontFamily:"'DM Sans',sans-serif",wordBreak:"break-word"}}>
+                    <span style={{fontWeight:700,color:"#fff"}}>{c.author_name||"Someone"}</span>{" "}{c.body}
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.25)",marginTop:1}}>
+                      {timeAgo(c.created_at)}
+                      {canDelete&&<button onClick={()=>onDeleteComment(c)} style={{background:"none",border:"none",cursor:"pointer",
+                        color:"rgba(255,120,120,0.6)",fontSize:10,marginLeft:8,padding:0,fontFamily:"'DM Sans',sans-serif"}}>Delete</button>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{display:"flex",gap:8,marginTop:2}}>
+              <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}
+                placeholder="Add a comment…" maxLength={400}
+                style={{flex:1,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,
+                  padding:"9px 14px",color:"#F0F0F0",fontSize:13,outline:"none",fontFamily:"'DM Sans',sans-serif",boxSizing:"border-box",minWidth:0}}/>
+              <button onClick={send} disabled={!draft.trim()||posting} style={{padding:"0 14px",borderRadius:20,border:"none",
+                cursor:draft.trim()?"pointer":"default",background:draft.trim()?"rgba(168,255,120,0.18)":"rgba(255,255,255,0.05)",
+                color:draft.trim()?"#A8FF78":"rgba(255,255,255,0.25)",fontSize:12.5,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+                {posting?"…":"Post"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {zoom&&ev.photo&&(
+        <PhotoLightbox photo={ev.photo} title={q.title} subtitle={`${ev.friend.name} · ${timeAgo(ev.timestamp)}`} onClose={()=>setZoom(false)}/>
+      )}
+    </article>
+  );
+}
+
+function ActivityFeedPage({ user, friends, ready=true, onOpenFriend }) {
+  const [events, setEvents]     = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [reactionsMap, setReactionsMap] = useState({}); // quest_id -> reactions[]
+  const [commentsMap, setCommentsMap]   = useState({}); // quest_id -> comments[]
+  const [commentsError, setCommentsError] = useState("");
+  const [limit, setLimit]       = useState(12);
+  const [tick, setTick]         = useState(0);
 
   useEffect(()=>{
+    if(!ready) return;
     let cancelled = false;
     (async()=>{
       setLoading(true);
@@ -3533,111 +3766,127 @@ function ActivityFeedPage({ user, friends }) {
           const quests = await sb.getFriendPublicQuests(f.user_id).catch(()=>[]);
           await Promise.all(quests.map(async(q)=>{
             if(q.status==="Completed" && q.completed_at) {
-              built.push({
-                type:"quest_complete", friend:f, quest:q,
-                photo:q.photo||null, timestamp:q.completed_at,
-              });
+              built.push({ key:`c${q.id}`, type:"quest_complete", friend:f, quest:q, photo:q.photo||null, timestamp:q.completed_at });
+            }
+            const startedAt = q.started_at || (q.status==="Active" ? q.created_at : null);
+            if(startedAt && !(q.status==="Completed" && q.completed_at && dayKeyLocal(startedAt)===dayKeyLocal(q.completed_at))) {
+              built.push({ key:`s${q.id}`, type:"quest_start", friend:f, quest:q, photo:null, timestamp:startedAt });
             }
             const steps = await sb.getQuestSteps(q.id).catch(()=>[]);
-            const doneSteps = steps.filter(s=>s.completed && s.completed_at);
-            doneSteps.forEach((s,idx)=>{
-              built.push({
-                type:"step", friend:f, quest:q, step:s,
-                photo:s.photo||null, timestamp:s.completed_at,
-                progress:{ done: steps.filter(x=>x.completed).length, total: steps.length },
-              });
+            steps.filter(s=>s.completed && s.completed_at).forEach(s=>{
+              built.push({ key:`p${s.id}`, type:"step", friend:f, quest:q, step:s, photo:s.photo||null, timestamp:s.completed_at,
+                progress:{ done:steps.filter(x=>x.completed).length, total:steps.length } });
             });
           }));
         }));
         built.sort((a,b)=> new Date(b.timestamp)-new Date(a.timestamp));
-        if(!cancelled){ setEvents(built); setLoading(false); }
+        if(cancelled) return;
+        setEvents(built);
+
+        // Reactions + comments for the quests in the feed (small rows, fetched in bulk)
+        const ids = [...new Set(built.map(e=>e.quest.id))];
+        if(ids.length){
+          const inList = ids.map(id=>`"${id}"`).join(",");
+          try{
+            const rr = await fetch(`${SUPABASE_URL}/rest/v1/reactions?quest_id=in.(${inList})`, {headers:sb.h});
+            const rd = await rr.json();
+            if(!cancelled && Array.isArray(rd)){
+              const m={}; rd.forEach(r=>{ (m[r.quest_id]=m[r.quest_id]||[]).push(r); });
+              setReactionsMap(m);
+            }
+          }catch(e){}
+          try{
+            const cr = await fetch(`${SUPABASE_URL}/rest/v1/quest_comments?quest_id=in.(${inList})&order=created_at.asc`, {headers:sb.h});
+            const cd = await cr.json();
+            if(!cancelled){
+              if(Array.isArray(cd)){
+                const m={}; cd.forEach(c=>{ (m[c.quest_id]=m[c.quest_id]||[]).push(c); });
+                setCommentsMap(m); setCommentsError("");
+              } else setCommentsError("Comments aren't set up yet.");
+            }
+          }catch(e){}
+        }
+        if(!cancelled) setLoading(false);
       } catch(e){ console.error(e); if(!cancelled) setLoading(false); }
     })();
     return ()=>{ cancelled=true; };
-  },[friends.length]);
+  },[friends.length, ready, tick]);
 
-  return (
-    <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
-      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
-        color:"rgba(255,255,255,0.2)",marginBottom:4}}>What Friends Are Up To</p>
-      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
-        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
-        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:16}}>
-        Activity
-      </h2>
+  const react = async(questId, emoji)=>{
+    // optimistic
+    setReactionsMap(prev=>{
+      const list = prev[questId]||[];
+      const has = list.some(r=>r.user_id===user.id && r.emoji===emoji);
+      return {...prev,[questId]: has ? list.filter(r=>!(r.user_id===user.id&&r.emoji===emoji))
+                                     : [...list,{id:"tmp"+Math.random(),quest_id:questId,user_id:user.id,emoji}]};
+    });
+    try{ await sb.toggleReaction(questId, user.id, emoji); }catch(e){ console.error(e); }
+  };
 
-      {loading?(
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {[...Array(4)].map((_,i)=>(
-            <div key={i} style={{height:76,borderRadius:16,background:"rgba(255,255,255,0.04)",
-              animation:"pulseDot 1.4s ease-in-out infinite",animationDelay:`${i*0.1}s`}}/>
-          ))}
-        </div>
-      ):events.length===0?(
-        <div style={{textAlign:"center",padding:"60px 0"}}>
-          <div style={{fontSize:40,marginBottom:14,opacity:0.15}}>🔔</div>
-          <p style={{fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
-            Nothing yet. When friends complete steps or quests they've<br/>made public, you'll see it here.
-          </p>
-        </div>
-      ):(
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {events.map((ev,i)=>{
-            const palette = getPalette(ev.quest.id, ev.quest.color_index);
-            const {avatar,color} = getCharacter(ev.friend.name||"?");
-            return(
-              <div key={i} style={{display:"flex",gap:12,padding:"13px 14px",borderRadius:16,
-                background:`${palette.color}0A`,border:`1px solid ${palette.color}22`,
-                animation:`cardIn 0.4s cubic-bezier(0.34,1.2,0.64,1) ${Math.min(i,8)*0.04}s both`}}>
-                {/* Friend avatar */}
-                <div style={{width:38,height:38,borderRadius:11,flexShrink:0,overflow:"hidden",
-                  background:ev.friend.photo?"transparent":`radial-gradient(circle at 35% 35%,${color}35,${color}10)`,
-                  border:`1.5px solid ${color}45`,display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:18}}>
-                  {ev.friend.photo?<img src={ev.friend.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:avatar}
-                </div>
+  const comment = async(questId, body)=>{
+    const row = { id:crypto.randomUUID(), quest_id:String(questId), user_id:user.id,
+      author_name:myDisplayName(user), body, created_at:new Date().toISOString() };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/quest_comments`, {
+      method:"POST", headers:{...sb.h,"Prefer":"return=minimal"}, body:JSON.stringify(row)
+    });
+    if(!r.ok){ setCommentsError("Couldn't post comment — comments may not be set up yet."); throw new Error("comment failed"); }
+    setCommentsMap(prev=>({...prev,[questId]:[...(prev[questId]||[]),row]}));
+  };
 
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,color:"rgba(255,255,255,0.8)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.4}}>
-                    <span style={{fontWeight:700,color:"#fff"}}>{ev.friend.name}</span>{" "}
-                    {ev.type==="quest_complete"?(
-                      <>completed <span style={{fontWeight:700,color:palette.color}}>{ev.quest.title}</span> {ev.quest.emoji}</>
-                    ):(
-                      <>checked off <span style={{fontWeight:600,color:"rgba(255,255,255,0.9)"}}>{ev.step.title}</span>{" "}
-                        on <span style={{fontWeight:700,color:palette.color}}>{ev.quest.title}</span></>
-                    )}
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5}}>
-                    <span style={{fontSize:10.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
-                      {timeAgo(ev.timestamp)}
-                    </span>
-                    {ev.type==="step"&&(
-                      <span style={{fontSize:10,fontWeight:700,color:palette.color,fontFamily:"'DM Sans',sans-serif"}}>
-                        · {ev.progress.done}/{ev.progress.total} steps
-                      </span>
-                    )}
-                    {ev.type==="quest_complete"&&(
-                      <span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",
-                        color:"#A8FF78",background:"rgba(168,255,120,0.12)",border:"1px solid rgba(168,255,120,0.3)",
-                        borderRadius:5,padding:"1px 6px",fontFamily:"'DM Sans',sans-serif"}}>
-                        Quest Complete
-                      </span>
-                    )}
-                  </div>
-                </div>
+  const delComment = async(c)=>{
+    setCommentsMap(prev=>({...prev,[c.quest_id]:(prev[c.quest_id]||[]).filter(x=>x.id!==c.id)}));
+    try{ await fetch(`${SUPABASE_URL}/rest/v1/quest_comments?id=eq.${c.id}`, {method:"DELETE", headers:sb.h}); }catch(e){}
+  };
 
-                {ev.photo&&(
-                  <img src={ev.photo} alt="" style={{width:52,height:52,borderRadius:10,objectFit:"cover",
-                    flexShrink:0,border:`1px solid ${palette.color}30`}}/>
-                )}
-              </div>
-            );
-          })}
-        </div>
+  if(!ready||loading) return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {[...Array(3)].map((_,i)=>(
+        <div key={i} style={{height:260,borderRadius:22,background:"rgba(255,255,255,0.04)",
+          animation:"pulseDot 1.4s ease-in-out infinite",animationDelay:`${i*0.1}s`}}/>
+      ))}
+    </div>
+  );
+
+  if(friends.length===0) return(
+    <div style={{textAlign:"center",padding:"50px 0"}}>
+      <div style={{fontSize:40,marginBottom:12,opacity:0.15}}>🤝</div>
+      <p style={{fontSize:14,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
+        Add friends from the People tab to see their quests here.
+      </p>
+    </div>
+  );
+
+  if(events.length===0) return(
+    <div style={{textAlign:"center",padding:"50px 0"}}>
+      <div style={{fontSize:40,marginBottom:14,opacity:0.15}}>📭</div>
+      <p style={{fontSize:14,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",lineHeight:1.7}}>
+        Nothing yet. When friends start or finish quests<br/>they've made public, you'll see them here.
+      </p>
+    </div>
+  );
+
+  return(
+    <div>
+      {commentsError&&(
+        <p style={{fontSize:11.5,color:"#FFB4B4",fontFamily:"'DM Sans',sans-serif",marginBottom:12}}>{commentsError}</p>
       )}
+      {events.slice(0,limit).map(ev=>(
+        <FeedPost key={ev.key} ev={ev} user={user}
+          reactions={reactionsMap[ev.quest.id]||[]} comments={commentsMap[ev.quest.id]||[]}
+          onReact={react} onComment={comment} onDeleteComment={delComment} onOpenFriend={onOpenFriend}/>
+      ))}
+      {events.length>limit&&(
+        <button onClick={()=>setLimit(l=>l+12)} style={{width:"100%",padding:"12px",borderRadius:14,cursor:"pointer",
+          background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",
+          fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>Load more</button>
+      )}
+      <button onClick={()=>setTick(t=>t+1)} style={{display:"block",margin:"14px auto 0",background:"none",border:"none",
+        cursor:"pointer",color:"rgba(255,255,255,0.25)",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>↻ Refresh</button>
     </div>
   );
 }
+const dayKeyLocal = (iso)=>{ const d=new Date(iso); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+
 
 function FriendProfileModal({ friend, onClose }) {
   const [visible, setVisible]   = useState(false);
@@ -6557,7 +6806,7 @@ const TUTORIAL_SECTIONS = [
   {icon:"🗺", color:"#F472B6", title:"Boards",
     text:"Create a shared Board and invite friends to build a quest list together. Everyone on the board can add, complete, and react to quests."},
   {icon:"🤝", color:"#FBBF24", title:"Friends & Leaderboard",
-    text:"Add friends by email. Tap a friend to see their public quests, rank, and movie log. Check the Leaderboard tab to see who has the most XP or completed quests."},
+    text:"Your friends sit on the shelf at the top — tap one to see their public quests, rank and movie log. The Feed shows when they start or finish public quests, where you can give kudos and comment. Ranks shows who has the most XP, and People is where you add friends by email."},
   {icon:"🎬", color:MOVIE_ACCENT, title:"Movies & Shows",
     text:"Log everything you watch — search pulls real posters automatically. Rate it, write your thoughts, and track TV shows season by season instead of one big blob."},
   {icon:"📸", color:"#C084FC", title:"Journal",
@@ -7089,7 +7338,6 @@ export default function App(){
     {id:"quests",   label:"Quests",   icon:Icons.shield, count:personalQuests.length},
     {id:"boards",   label:"Boards",   icon:Icons.board,  count:boards.length+(boardInvites.length>0?boardInvites.length:0)},
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
-    {id:"activity", label:"Activity", icon:Icons.bell,   count:0},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
     {id:"journal",  label:"Journal",  icon:Icons.cal,    count:0},
     {id:"movies",   label:"Movies",   icon:Icons.film,   count:0},
@@ -7474,10 +7722,6 @@ export default function App(){
 
         {tab==="friends"&&(
           <FriendsPage user={user} quests={quests} members={members} onFriendsLoaded={f=>setFriends(f)}/>
-        )}
-
-        {tab==="activity"&&(
-          <ActivityFeedPage user={user} friends={friends}/>
         )}
 
         {tab==="journal"&&(
