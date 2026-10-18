@@ -5157,7 +5157,7 @@ const parseDayKey = (k) => new Date(k+"T00:00:00");
 const startOfWeek = (d) => { const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-x.getDay()); return x; };
 const memPhotoList = (m) => m.photos?.length ? m.photos : (m.photo ? [m.photo] : []);
 
-function JournalPage({ user, quests, onEditQuest }) {
+function JournalPage({ user, quests, onEditQuest, onShareQuest }) {
   const [viewDate, setViewDate]       = useState(new Date());
   const [memories, setMemories]       = useState([]);
   const [selectedDate, setSelectedDate] = useState(null); // "YYYY-MM-DD" of the open day sheet
@@ -5561,6 +5561,7 @@ function JournalPage({ user, quests, onEditQuest }) {
           completedQuests={index.done[selectedDate]||[]}
           startedQuests={index.started[selectedDate]||[]}
           onOpenQuest={(q)=>{ setSelectedDate(null); onEditQuest&&onEditQuest(q); }}
+          onShareQuest={(q)=>{ setSelectedDate(null); onShareQuest&&onShareQuest(q); }}
           userId={user.id}
           onSave={async(mem)=>{
             await sb.upsertMemory({...mem,user_id:user.id});
@@ -5578,7 +5579,7 @@ function JournalPage({ user, quests, onEditQuest }) {
 }
 
 // ─── MEMORY DAY MODAL ─────────────────────────────────────────────────────────
-function MemoryDayModal({ date, dayMemories=[], completedQuests=[], startedQuests=[], onOpenQuest, userId, onSave, onDelete, onClose }) {
+function MemoryDayModal({ date, dayMemories=[], completedQuests=[], startedQuests=[], onOpenQuest, onShareQuest, userId, onSave, onDelete, onClose }) {
   const [view, setView]     = useState("list");
   const [editing, setEditing] = useState(null);
   const [visible, setVisible] = useState(false);
@@ -5632,23 +5633,22 @@ function MemoryDayModal({ date, dayMemories=[], completedQuests=[], startedQuest
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 <p style={{margin:0,fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
                   color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>Quests</p>
-                {[...completedQuests.map(q=>({q,kind:"done"})),...startedQuests.map(q=>({q,kind:"started"}))].map(({q,kind})=>{
+                {completedQuests.map((q,idx)=>(
+                  <CompletedQuestCard key={q.id} quest={q} index={idx} onEdit={onOpenQuest} onShare={onShareQuest}/>
+                ))}
+                {startedQuests.map(q=>{
                   const pal=getPalette(q.id,q.color_index);
                   return(
-                    <button key={q.id+kind} onClick={()=>onOpenQuest&&onOpenQuest(q)} style={{
+                    <button key={q.id+"s"} onClick={()=>onOpenQuest&&onOpenQuest(q)} style={{
                       display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:14,
                       textAlign:"left",cursor:"pointer",background:"rgba(255,255,255,0.03)",
                       border:`1px solid ${pal.color}28`,borderLeft:`3px solid ${pal.color}`}}>
-                      <span style={{fontSize:18,flexShrink:0}}>{q.emoji||(kind==="done"?"🔥":"⚔")}</span>
+                      <span style={{fontSize:18,flexShrink:0}}>{q.emoji||"⚔"}</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13.5,fontWeight:700,color:"#F0F0F0",fontFamily:"'Cormorant Garamond',serif",
                           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.title}</div>
-                        <div style={{fontSize:10.5,color:kind==="done"?"#FBBF24":"#A8FF78",
-                          fontFamily:"'DM Sans',sans-serif",marginTop:1,fontWeight:600}}>
-                          {kind==="done"?"🔥 Completed":"⚔ Started"}
-                        </div>
+                        <div style={{fontSize:10.5,color:"#A8FF78",fontFamily:"'DM Sans',sans-serif",marginTop:1,fontWeight:600}}>⚔ Started this day</div>
                       </div>
-                      {q.photo&&<img src={q.photo} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
                     </button>
                   );
                 })}
@@ -7391,7 +7391,7 @@ export default function App(){
         )}
 
         {tab==="journal"&&(
-          <JournalPage user={user} quests={quests} onEditQuest={q=>setQuestModal(q)}/>
+          <JournalPage user={user} quests={quests} onEditQuest={q=>setQuestModal(q)} onShareQuest={q=>setShareQuest(q)}/>
         )}
 
         {tab==="movies"&&(
