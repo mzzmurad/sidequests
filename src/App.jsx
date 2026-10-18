@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -953,112 +953,6 @@ function PartySection({names,members}){
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── STREAK CALENDAR ──────────────────────────────────────────────────────────
-function StreakCalendar({quests}){
-  const [viewDate,setViewDate]=useState(new Date());
-  const year=viewDate.getFullYear();
-  const month=viewDate.getMonth();
-  const monthName=viewDate.toLocaleDateString("en-US",{month:"long",year:"numeric"});
-  const firstDay=new Date(year,month,1).getDay();
-  const daysInMonth=new Date(year,month+1,0).getDate();
-  const today=new Date();
-
-  // Build sets of dates from quests
-  const fireDates=new Set();
-  const startDates=new Set();
-  quests.forEach(q=>{
-    if(q.status==="Completed"&&q.completed_at){
-      const d=new Date(q.completed_at);
-      fireDates.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
-    }
-    if(q.started_at){
-      const d=new Date(q.started_at);
-      startDates.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
-    }
-  });
-
-  const prevMonth=()=>setViewDate(new Date(year,month-1,1));
-  const nextMonth=()=>setViewDate(new Date(year,month+1,1));
-  const isToday=(d)=>today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
-  const hasFire=(d)=>fireDates.has(`${year}-${month}-${d}`);
-  const hasStart=(d)=>startDates.has(`${year}-${month}-${d}`);
-
-  const completedThisMonth=quests.filter(q=>{
-    if(q.status!=="Completed"||!q.completed_at) return false;
-    const d=new Date(q.completed_at);
-    return d.getFullYear()===year&&d.getMonth()===month;
-  });
-
-  return(
-    <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
-      borderRadius:20,padding:"20px",marginBottom:16,animation:"cardIn 0.5s ease both"}}>
-
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <Icon d={Icons.cal} size={16} stroke="rgba(255,255,255,0.4)"/>
-          <span style={{fontSize:14,fontWeight:700,color:"rgba(255,255,255,0.8)",fontFamily:"'Cormorant Garamond',serif"}}>{monthName}</span>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          {completedThisMonth.length>0&&(
-            <span style={{fontSize:11,color:"#FBBF24",fontFamily:"'DM Sans',sans-serif",fontWeight:600,
-              background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.2)",
-              padding:"3px 10px",borderRadius:20}}>
-              🔥 {completedThisMonth.length} this month
-            </span>
-          )}
-          <button onClick={prevMonth} style={{background:"none",border:"none",cursor:"pointer",
-            color:"rgba(255,255,255,0.4)",fontSize:18,padding:"0 4px",lineHeight:1}}>‹</button>
-          <button onClick={nextMonth} style={{background:"none",border:"none",cursor:"pointer",
-            color:"rgba(255,255,255,0.4)",fontSize:18,padding:"0 4px",lineHeight:1}}>›</button>
-        </div>
-      </div>
-
-      {/* Day labels */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
-        {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d=>(
-          <div key={d} style={{textAlign:"center",fontSize:10,color:"rgba(255,255,255,0.2)",
-            fontFamily:"'DM Sans',sans-serif",fontWeight:600,letterSpacing:"0.05em"}}>{d}</div>
-        ))}
-      </div>
-
-      {/* Day grid */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-        {Array.from({length:firstDay}).map((_,i)=><div key={`e${i}`}/>)}
-        {Array.from({length:daysInMonth}).map((_,i)=>{
-          const d=i+1;
-          const fire=hasFire(d);
-          const start=hasStart(d);
-          const tod=isToday(d);
-          return(
-            <div key={d} style={{
-              aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",
-              borderRadius:8,position:"relative",
-              background:fire?"rgba(251,191,36,0.12)":start?"rgba(168,255,120,0.08)":tod?"rgba(255,255,255,0.06)":"transparent",
-              border:fire?"1px solid rgba(251,191,36,0.25)":start?"1px solid rgba(168,255,120,0.2)":tod?"1px solid rgba(255,255,255,0.2)":"1px solid transparent",
-              transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",
-            }}>
-              {fire?(
-                <span style={{fontSize:16,lineHeight:1,filter:"drop-shadow(0 0 6px rgba(251,191,36,0.8))"}}>🔥</span>
-              ):(
-                <span style={{fontSize:12,color:tod?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.3)",
-                  fontFamily:"'DM Sans',sans-serif",fontWeight:tod?700:400}}>{d}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:4,
-        fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}><span>🔥</span> quest completed</div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}><span>⚔</span> quest started</div>
-      </div>
     </div>
   );
 }
@@ -5257,70 +5151,190 @@ function MovieModal({ movie, onSave, onDelete, onClose }) {
 }
 
 
-// ─── MEMORIES PAGE ────────────────────────────────────────────────────────────
-function MemoriesPage({ user }) {
-  const [viewDate, setViewDate]   = useState(new Date());
-  const [memories, setMemories]   = useState([]);
-  const [selected, setSelected]   = useState(null); // {date, memory|null}
-  const [loading, setLoading]     = useState(true);
+// ─── JOURNAL — streaks, calendar, memories and week/month/year recaps ─────────
+const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const parseDayKey = (k) => new Date(k+"T00:00:00");
+const startOfWeek = (d) => { const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-x.getDay()); return x; };
+const memPhotoList = (m) => m.photos?.length ? m.photos : (m.photo ? [m.photo] : []);
 
-  const year  = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const monthName = viewDate.toLocaleDateString("en-US",{month:"long",year:"numeric"});
-  const firstDay = new Date(year,month,1).getDay();
-  const daysInMonth = new Date(year,month+1,0).getDate();
-  const today = new Date();
+function JournalPage({ user, quests, onEditQuest }) {
+  const [viewDate, setViewDate]       = useState(new Date());
+  const [memories, setMemories]       = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null); // "YYYY-MM-DD" of the open day sheet
+  const [period, setPeriod]           = useState("month"); // week | month | year
+  const [anchor, setAnchor]           = useState(new Date());
+  const [showAllDone, setShowAllDone] = useState(false);
+
+  const today    = new Date();
+  const todayKey = dayKey(today);
 
   useEffect(()=>{
-    setLoading(true);
-    sb.getMemories(user.id).then(m=>{ setMemories(m); setLoading(false); }).catch(()=>setLoading(false));
+    sb.getMemories(user.id).then(m=>setMemories(Array.isArray(m)?m:[])).catch(()=>{});
   },[]);
 
-  const getDayMemories = (d) => {
-    const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    return memories.filter(m=>m.date===dateStr);
+  // Everything indexed by local calendar day
+  const index = useMemo(()=>{
+    const done={}, started={}, mems={};
+    quests.forEach(q=>{
+      let doneKey=null;
+      if(q.status==="Completed"&&q.completed_at){
+        doneKey=dayKey(new Date(q.completed_at));
+        (done[doneKey]=done[doneKey]||[]).push(q);
+      }
+      if(q.started_at){
+        const k=dayKey(new Date(q.started_at));
+        if(k!==doneKey) (started[k]=started[k]||[]).push(q); // don't list a same-day start+finish twice
+      }
+    });
+    memories.forEach(m=>{ (mems[m.date]=mems[m.date]||[]).push(m); });
+    return {done,started,mems};
+  },[quests,memories]);
+
+  // Streak = consecutive days with a completed quest or a logged moment
+  const streaks = useMemo(()=>{
+    const active = new Set([...Object.keys(index.done), ...Object.keys(index.mems)]);
+    let cur=0;
+    const d=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+    if(!active.has(dayKey(d))) d.setDate(d.getDate()-1); // today not done yet shouldn't zero the streak
+    while(active.has(dayKey(d))){ cur++; d.setDate(d.getDate()-1); }
+    let best=0, run=0, prev=null;
+    [...active].sort().forEach(k=>{
+      const dt=parseDayKey(k);
+      run = (prev && Math.round((dt-prev)/86400000)===1) ? run+1 : 1;
+      best = Math.max(best,run);
+      prev = dt;
+    });
+    return {cur,best,total:active.size};
+  },[index]);
+
+  // ── Calendar month ──
+  const year  = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const monthName   = viewDate.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const firstDay    = new Date(year,month,1).getDay();
+  const daysInMonth = new Date(year,month+1,0).getDate();
+  const keyFor = (d) => `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+
+  // ── Recap range ──
+  const a = new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate());
+  let rStart, rEnd, rLabel;
+  if(period==="week"){
+    rStart=startOfWeek(a); rEnd=new Date(rStart); rEnd.setDate(rEnd.getDate()+6);
+    rLabel=`${rStart.toLocaleDateString("en-US",{month:"short",day:"numeric"})} – ${rEnd.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}`;
+  } else if(period==="month"){
+    rStart=new Date(a.getFullYear(),a.getMonth(),1); rEnd=new Date(a.getFullYear(),a.getMonth()+1,0);
+    rLabel=rStart.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  } else {
+    rStart=new Date(a.getFullYear(),0,1); rEnd=new Date(a.getFullYear(),11,31);
+    rLabel=String(a.getFullYear());
+  }
+  const todayMidnight = new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  const atPresent = rEnd >= todayMidnight;
+  const shift = (dir) => {
+    if(period==="week")       setAnchor(new Date(a.getFullYear(),a.getMonth(),a.getDate()+7*dir));
+    else if(period==="month") setAnchor(new Date(a.getFullYear(),a.getMonth()+dir,1));
+    else                      setAnchor(new Date(a.getFullYear()+dir,0,1));
+    setShowAllDone(false);
   };
 
-  const openDay = (d) => {
-    const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    setSelected({date:dateStr, memories:getDayMemories(d)});
-  };
+  const days=[];
+  for(let d=new Date(rStart); d<=rEnd; d.setDate(d.getDate()+1)) days.push(dayKey(d));
 
-  const isToday = (d) => today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
-  const isFuture = (d) => new Date(year,month,d) > today;
+  const doneList = days.flatMap(k=>index.done[k]||[])
+    .sort((x,y)=>new Date(y.completed_at)-new Date(x.completed_at));
+  const memList  = days.flatMap(k=>index.mems[k]||[]);
+  const photoMoments = memList.flatMap(m=>memPhotoList(m).map(p=>({p,date:m.date})));
+  const activeDays = days.filter(k=>(index.done[k]||[]).length>0||(index.mems[k]||[]).length>0).length;
+  const xp = calcXP(doneList);
+  const places = new Set(doneList.filter(q=>q.location?.name).map(q=>q.location.name)).size;
+  const photoCount = photoMoments.length + doneList.filter(q=>q.photo).length;
+
+  const catCounts = {};
+  doneList.forEach(q=>{ if(q.category) catCounts[q.category]=(catCounts[q.category]||0)+1; });
+  const topCats = Object.entries(catCounts).sort((x,y)=>y[1]-x[1]).slice(0,4);
+
+  let buckets;
+  if(period==="year"){
+    buckets = Array.from({length:12},(_,m)=>{
+      const prefix=`${rStart.getFullYear()}-${String(m+1).padStart(2,"0")}`;
+      const ks=days.filter(k=>k.startsWith(prefix));
+      return {
+        label:"JFMAMJJASOND"[m],
+        title:new Date(rStart.getFullYear(),m,1).toLocaleDateString("en-US",{month:"long"}),
+        done:ks.reduce((n,k)=>n+(index.done[k]||[]).length,0),
+        mems:ks.reduce((n,k)=>n+(index.mems[k]||[]).length,0),
+      };
+    });
+  } else {
+    buckets = days.map((k,i)=>({
+      label: period==="week" ? ["S","M","T","W","T","F","S"][parseDayKey(k).getDay()] : ((i===0||(i+1)%5===0)?String(i+1):""),
+      title: parseDayKey(k).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}),
+      done:(index.done[k]||[]).length,
+      mems:(index.mems[k]||[]).length,
+    }));
+  }
+  const maxBucket = Math.max(1,...buckets.map(b=>b.done+b.mems));
+  const BAR_H = 76;
+  const barGap = period==="month" ? 2 : period==="week" ? 10 : 6;
+  const hasAnything = doneList.length>0 || memList.length>0;
+
+  const sec = {fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+    color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10};
+  const card = {background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
+    borderRadius:20,padding:"18px 20px",marginBottom:16};
+  const navBtn = (disabled)=>({background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",
+    borderRadius:8,padding:"5px 10px",cursor:disabled?"default":"pointer",
+    color:"rgba(255,255,255,0.5)",fontSize:16,opacity:disabled?0.3:1});
+
+  const selMemories = selectedDate ? (index.mems[selectedDate]||[]) : [];
 
   return (
     <div style={{maxWidth:560,margin:"0 auto",padding:"20px 24px 100px"}}>
-      <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
-        color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Story</p>
-      <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",
-        background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
-        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:20}}>
-        Memories
-      </h2>
+      <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:20}}>
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",
+            color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Story</p>
+          <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",margin:0,
+            background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",
+            WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Journal</h2>
+        </div>
+        <button onClick={()=>setSelectedDate(todayKey)} style={{padding:"8px 14px",borderRadius:12,
+          background:"rgba(192,132,252,0.12)",border:"1px solid rgba(192,132,252,0.3)",cursor:"pointer",
+          color:"#C084FC",fontSize:12,fontWeight:700,fontFamily:"'DM Sans',sans-serif"}}>
+          + Log today
+        </button>
+      </div>
 
-      {/* Calendar */}
-      <div style={{background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.07)",
-        borderRadius:20,padding:"20px",marginBottom:16}}>
-        {/* Month nav */}
+      {/* ── Streaks ── */}
+      <div style={{...card,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,textAlign:"center"}}>
+        {[
+          {v:streaks.cur,  l:"Current streak", icon:"🔥", c:"#FBBF24"},
+          {v:streaks.best, l:"Best streak",    icon:"🏆", c:"#A8FF78"},
+          {v:streaks.total,l:"Active days",    icon:"📅", c:"#C084FC"},
+        ].map(s=>(
+          <div key={s.l}>
+            <div style={{fontSize:18,lineHeight:1,marginBottom:6}}>{s.icon}</div>
+            <div style={{fontSize:26,fontWeight:700,color:s.c,fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",marginTop:4}}>{s.l}</div>
+          </div>
+        ))}
+        <p style={{gridColumn:"1 / -1",margin:"6px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.2)",
+          fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}>
+          A streak is days in a row with a quest completed or a moment logged.
+        </p>
+      </div>
+
+      {/* ── Calendar ── */}
+      <div style={card}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-          <h3 style={{fontSize:16,fontWeight:700,color:"rgba(255,255,255,0.8)",
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"rgba(255,255,255,0.8)",
             fontFamily:"'Cormorant Garamond',serif"}}>{monthName}</h3>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setViewDate(new Date(year,month-1,1))}
-              style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",
-                borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:16}}>
-              ‹
-            </button>
-            <button onClick={()=>setViewDate(new Date(year,month+1,1))}
-              style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",
-                borderRadius:8,padding:"5px 10px",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:16}}>
-              ›
-            </button>
+            <button onClick={()=>setViewDate(new Date(year,month-1,1))} style={navBtn(false)}>‹</button>
+            <button onClick={()=>setViewDate(new Date(year,month+1,1))} style={navBtn(false)}>›</button>
           </div>
         </div>
 
-        {/* Day labels */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
           {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d=>(
             <div key={d} style={{textAlign:"center",fontSize:10,color:"rgba(255,255,255,0.2)",
@@ -5328,169 +5342,235 @@ function MemoriesPage({ user }) {
           ))}
         </div>
 
-        {/* Days grid */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
           {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
           {Array.from({length:daysInMonth}).map((_,i)=>{
-            const d = i+1;
-            const dayMems = getDayMemories(d);
-            const mem = dayMems[0]||null;
-            const memCount = dayMems.length;
-            const tod = isToday(d);
-            const fut = isFuture(d);
+            const d=i+1, k=keyFor(d);
+            const dn=index.done[k]||[], st=index.started[k]||[], mm=index.mems[k]||[];
+            const photo=mm.flatMap(memPhotoList)[0]||null;
+            const tod=k===todayKey;
+            const fut=k>todayKey;
+            const hasDone=dn.length>0, hasMem=mm.length>0;
             return(
-              <button key={d} onClick={()=>!fut&&openDay(d)} style={{
-                aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",
-                justifyContent:"center",borderRadius:10,border:"none",cursor:fut?"default":"pointer",
-                background: mem?"rgba(192,132,252,0.15)":tod?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)",
-                outline: tod?"1px solid rgba(255,255,255,0.25)":mem?"1px solid rgba(192,132,252,0.4)":"1px solid transparent",
-                transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)",opacity:fut?0.3:1,
-                position:"relative",
-              }}
-                onMouseEnter={e=>{ if(!fut) e.currentTarget.style.background=mem?"rgba(192,132,252,0.25)":"rgba(255,255,255,0.08)"; }}
-                onMouseLeave={e=>e.currentTarget.style.background=mem?"rgba(192,132,252,0.15)":tod?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)"}
-              >
-                {mem?.photo?(
-                  <img src={mem.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover",
-                    borderRadius:9,position:"absolute",inset:0,opacity:0.6}}/>
-                ):null}
-                <span style={{fontSize:12,color:mem?"rgba(255,255,255,0.9)":tod?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",
-                  fontFamily:"'DM Sans',sans-serif",fontWeight:tod?700:400,
-                  position:"relative",zIndex:1}}>{d}</span>
-                {memCount>0&&<div style={{position:"absolute",bottom:3,zIndex:1,
-                  display:"flex",gap:2,justifyContent:"center"}}>
-                  {Array.from({length:Math.min(memCount,3)}).map((_,i)=>(
-                    <div key={i} style={{width:3,height:3,borderRadius:"50%",background:"#C084FC"}}/>
-                  ))}
-                </div>}
+              <button key={d} onClick={()=>!fut&&setSelectedDate(k)} style={{
+                aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                borderRadius:10,border:"none",cursor:fut?"default":"pointer",position:"relative",overflow:"hidden",
+                background:hasDone?"rgba(251,191,36,0.13)":hasMem?"rgba(192,132,252,0.13)":"rgba(255,255,255,0.03)",
+                outline:tod?"1px solid rgba(255,255,255,0.35)":hasDone?"1px solid rgba(251,191,36,0.3)":hasMem?"1px solid rgba(192,132,252,0.35)":"1px solid transparent",
+                opacity:fut?0.3:1,transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}>
+                {photo&&<img src={photo} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",
+                  objectFit:"cover",opacity:0.4}}/>}
+                {hasDone?(
+                  <>
+                    <span style={{position:"absolute",top:3,left:5,fontSize:8.5,fontWeight:700,zIndex:1,
+                      color:"rgba(255,255,255,0.55)",fontFamily:"'DM Sans',sans-serif"}}>{d}</span>
+                    <span style={{fontSize:17,lineHeight:1,zIndex:1,
+                      filter:"drop-shadow(0 0 6px rgba(251,191,36,0.7))"}}>🔥</span>
+                  </>
+                ):(
+                  <span style={{fontSize:12,zIndex:1,fontFamily:"'DM Sans',sans-serif",fontWeight:tod?700:400,
+                    color:tod||hasMem?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)"}}>{d}</span>
+                )}
+                {(hasMem||st.length>0)&&(
+                  <div style={{position:"absolute",bottom:3,zIndex:1,display:"flex",gap:2}}>
+                    {Array.from({length:Math.min(mm.length,3)}).map((_,j)=>(
+                      <div key={"m"+j} style={{width:3,height:3,borderRadius:"50%",background:"#C084FC"}}/>
+                    ))}
+                    {st.length>0&&<div style={{width:3,height:3,borderRadius:"50%",background:"#A8FF78"}}/>}
+                  </div>
+                )}
               </button>
             );
           })}
         </div>
-        <div style={{marginTop:12,display:"flex",alignItems:"center",gap:10,
-          fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>
+
+        <div style={{marginTop:12,display:"flex",flexWrap:"wrap",alignItems:"center",gap:"6px 14px",
+          fontSize:10,color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>
+          <span>🔥 quest completed</span>
           <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
-            <span style={{width:8,height:8,borderRadius:2,background:"rgba(192,132,252,0.4)",display:"inline-block"}}/>
-            has memory
+            <span style={{width:6,height:6,borderRadius:"50%",background:"#C084FC",display:"inline-block"}}/> moment
           </span>
           <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
-            <span style={{outline:"1px solid rgba(255,255,255,0.25)",width:8,height:8,borderRadius:2,display:"inline-block"}}/>
-            today
+            <span style={{width:6,height:6,borderRadius:"50%",background:"#A8FF78",display:"inline-block"}}/> quest started
           </span>
+          <span style={{marginLeft:"auto"}}>Tap a day to see everything</span>
         </div>
       </div>
 
-      {/* This month's memories — grouped by day, same-day photos bundle into a stack */}
-      {(()=>{
-        const monthPrefix = `${year}-${String(month+1).padStart(2,"0")}`;
-        const monthMemories = memories.filter(m=>m.date.startsWith(monthPrefix));
-        const groups = {};
-        monthMemories.forEach(m=>{ (groups[m.date] = groups[m.date]||[]).push(m); });
-        const dayGroups = Object.entries(groups)
-          .sort((a,b)=>b[0].localeCompare(a[0]))
-          .map(([date,mems])=>({date,mems}));
+      {/* ── Recap: week / month / year ── */}
+      <div style={card}>
+        <p style={{...sec,marginBottom:12}}>Recap</p>
 
-        if(dayGroups.length===0) return (
-          <div style={{textAlign:"center",padding:"30px 0"}}>
-            <p style={{fontSize:12,color:"rgba(255,255,255,0.15)",fontFamily:"'DM Sans',sans-serif"}}>
-              No memories logged in {monthName} yet.
-            </p>
-          </div>
-        );
+        <div style={{display:"flex",background:"rgba(255,255,255,0.04)",borderRadius:12,padding:3,marginBottom:14}}>
+          {[["week","Week"],["month","Month"],["year","Year"]].map(([id,label])=>(
+            <button key={id} onClick={()=>{setPeriod(id);setShowAllDone(false);}} style={{
+              flex:1,padding:"8px 0",borderRadius:9,border:"none",cursor:"pointer",
+              background:period===id?"rgba(255,255,255,0.1)":"transparent",
+              color:period===id?"#F2F2F2":"rgba(255,255,255,0.35)",
+              fontSize:12.5,fontWeight:700,fontFamily:"'DM Sans',sans-serif",
+              transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}>{label}</button>
+          ))}
+        </div>
 
-        return (
-          <div>
-            <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
-              color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:10}}>
-              {monthName} Memories
-            </p>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {dayGroups.map(({date,mems})=>{
-                const photos = mems.flatMap(m=>m.photos?.length?m.photos:(m.photo?[m.photo]:[]));
-                const primary = mems[0];
-                const multi = mems.length>1;
-                return (
-                  <button key={date} onClick={()=>setSelected({date,memories:mems})}
-                    style={{display:"flex",alignItems:"center",gap:16,padding:"12px 14px",
-                      borderRadius:14,background:"rgba(255,255,255,0.025)",
-                      border:"1px solid rgba(192,132,252,0.2)",cursor:"pointer",textAlign:"left",
-                      transition:"all 0.15s cubic-bezier(0.34,1.2,0.64,1)"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="rgba(192,132,252,0.08)"}
-                    onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.025)"}
-                  >
-                    {/* Stacked photo thumbnails when a day has more than one memory */}
-                    <div style={{position:"relative",width:56,height:48,flexShrink:0}}>
-                      {photos.length>0?(
-                        photos.slice(0,3).map((p,idx)=>(
-                          <img key={idx} src={p} alt="" style={{
-                            position:"absolute",width:40,height:40,borderRadius:9,objectFit:"cover",
-                            border:"2px solid #0C0C0F",
-                            top:idx*3, left:idx*7,
-                            zIndex:3-idx,
-                            transform:`rotate(${(idx-1)*7}deg)`,
-                            boxShadow:"0 2px 6px rgba(0,0,0,0.4)",
-                          }}/>
-                        ))
-                      ):(
-                        <div style={{width:44,height:44,borderRadius:10,
-                          background:"rgba(192,132,252,0.1)",border:"1px solid rgba(192,132,252,0.2)",
-                          display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>
-                          {primary.emoji||"📸"}
-                        </div>
-                      )}
-                      {multi&&(
-                        <div style={{position:"absolute",bottom:-3,right:-3,zIndex:4,
-                          background:"#C084FC",color:"#0A0A0C",fontSize:9.5,fontWeight:700,
-                          borderRadius:9,padding:"1px 5px",border:"2px solid #0C0C0F",
-                          fontFamily:"'DM Sans',sans-serif"}}>
-                          {mems.length}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0",
-                        fontFamily:"'Cormorant Garamond',serif",
-                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {multi ? `${mems.length} moments` : (primary.title||"Memory")}
-                      </div>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.3)",
-                        fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
-                        {new Date(date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
-                      </div>
-                      {!multi&&primary.note&&<div style={{fontSize:11.5,color:"rgba(255,255,255,0.4)",
-                        fontFamily:"'DM Sans',sans-serif",marginTop:2,
-                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {primary.note}
-                      </div>}
-                    </div>
-                  </button>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <button onClick={()=>shift(-1)} style={navBtn(false)}>‹</button>
+          <span style={{fontSize:14,fontWeight:700,color:"rgba(255,255,255,0.8)",
+            fontFamily:"'Cormorant Garamond',serif"}}>{rLabel}</span>
+          <button onClick={()=>!atPresent&&shift(1)} disabled={atPresent} style={navBtn(atPresent)}>›</button>
+        </div>
+
+        {/* Stat tiles */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
+          {[
+            {v:doneList.length,           l:"Quests done",  c:"#FBBF24"},
+            {v:xp,                        l:"XP earned",    c:"#A8FF78"},
+            {v:memList.length,            l:"Moments",      c:"#C084FC"},
+            {v:photoCount,                l:"Photos",       c:"#78C1FF"},
+            {v:`${activeDays}/${days.length}`,l:"Active days",c:"#F0F0F0"},
+            {v:places,                    l:"Places",       c:"#2DD4BF"},
+          ].map(s=>(
+            <div key={s.l} style={{padding:"12px 8px",borderRadius:14,textAlign:"center",
+              background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)"}}>
+              <div style={{fontSize:20,fontWeight:700,color:s.c,fontFamily:"'Cormorant Garamond',serif",lineHeight:1}}>{s.v}</div>
+              <div style={{fontSize:9.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",marginTop:5}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+
+        {!hasAnything?(
+          <p style={{textAlign:"center",padding:"18px 0 6px",margin:0,fontSize:12.5,
+            color:"rgba(255,255,255,0.2)",fontFamily:"'DM Sans',sans-serif"}}>
+            Nothing logged in this {period} yet.
+          </p>
+        ):(
+          <>
+            {/* Activity bars */}
+            <p style={sec}>Activity</p>
+            <div style={{display:"flex",alignItems:"flex-end",gap:barGap,height:BAR_H,marginBottom:6}}>
+              {buckets.map((b,i)=>{
+                const dh = b.done ? Math.max(3,(b.done/maxBucket)*BAR_H) : 0;
+                const mh = b.mems ? Math.max(3,(b.mems/maxBucket)*BAR_H) : 0;
+                return(
+                  <div key={i} title={`${b.title}: ${b.done} quest${b.done!==1?"s":""}, ${b.mems} moment${b.mems!==1?"s":""}`}
+                    style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"flex-end",
+                      alignItems:"stretch",height:"100%",gap:1}}>
+                    {mh>0&&<div style={{height:mh,borderRadius:3,background:"#C084FC"}}/>}
+                    {dh>0&&<div style={{height:dh,borderRadius:3,background:"#FBBF24"}}/>}
+                    {dh===0&&mh===0&&<div style={{height:2,borderRadius:1,background:"rgba(255,255,255,0.07)"}}/>}
+                  </div>
                 );
               })}
             </div>
-          </div>
-        );
-      })()}
+            <div style={{display:"flex",gap:barGap,marginBottom:12}}>
+              {buckets.map((b,i)=>(
+                <div key={i} style={{flex:1,textAlign:"center",fontSize:9,color:"rgba(255,255,255,0.25)",
+                  fontFamily:"'DM Sans',sans-serif",overflow:"visible",whiteSpace:"nowrap"}}>{b.label}</div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:14,marginBottom:18,fontSize:10,color:"rgba(255,255,255,0.25)",
+              fontFamily:"'DM Sans',sans-serif"}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                <span style={{width:8,height:8,borderRadius:2,background:"#FBBF24",display:"inline-block"}}/> quests done
+              </span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                <span style={{width:8,height:8,borderRadius:2,background:"#C084FC",display:"inline-block"}}/> moments
+              </span>
+            </div>
 
-      {/* Day modal */}
-      {selected&&(
+            {/* Categories */}
+            {topCats.length>0&&(
+              <div style={{marginBottom:18}}>
+                <p style={sec}>What you did</p>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {topCats.map(([cat,n])=>(
+                    <div key={cat} style={{display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{width:78,fontSize:11.5,color:"rgba(255,255,255,0.55)",
+                        fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>{cat}</span>
+                      <div style={{flex:1,height:6,borderRadius:3,background:"rgba(255,255,255,0.06)",overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${(n/topCats[0][1])*100}%`,borderRadius:3,background:"#FBBF24",opacity:0.8}}/>
+                      </div>
+                      <span style={{width:18,textAlign:"right",fontSize:11,fontWeight:700,
+                        color:"rgba(255,255,255,0.45)",fontFamily:"'DM Sans',sans-serif"}}>{n}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quests completed */}
+            {doneList.length>0&&(
+              <div style={{marginBottom:photoMoments.length>0?18:0}}>
+                <p style={sec}>Quests completed</p>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {(showAllDone?doneList:doneList.slice(0,6)).map(q=>{
+                    const p=getPalette(q.id,q.color_index);
+                    return(
+                      <button key={q.id} onClick={()=>setSelectedDate(dayKey(new Date(q.completed_at)))} style={{
+                        display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,
+                        textAlign:"left",cursor:"pointer",background:"rgba(255,255,255,0.025)",
+                        border:`1px solid ${p.color}22`,borderLeft:`3px solid ${p.color}`}}>
+                        <span style={{fontSize:16,flexShrink:0}}>{q.emoji||"🔥"}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0",fontFamily:"'Cormorant Garamond',serif",
+                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.title}</div>
+                          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif",marginTop:1}}>
+                            {new Date(q.completed_at).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
+                          </div>
+                        </div>
+                        <span style={{fontSize:10.5,fontWeight:700,color:"#A8FF78",fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>
+                          +{XP_VALUES[q.difficulty]||XP_VALUES.Completed} XP
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {doneList.length>6&&(
+                  <button onClick={()=>setShowAllDone(v=>!v)} style={{marginTop:8,background:"none",border:"none",
+                    cursor:"pointer",color:"rgba(255,255,255,0.4)",fontSize:12,fontWeight:600,
+                    fontFamily:"'DM Sans',sans-serif",padding:"4px 0"}}>
+                    {showAllDone?"Show less":`Show all ${doneList.length}`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Moments strip */}
+            {photoMoments.length>0&&(
+              <div>
+                <p style={sec}>Moments</p>
+                <div style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+                  {photoMoments.slice(0,14).map((pm,i)=>(
+                    <button key={i} onClick={()=>setSelectedDate(pm.date)} style={{
+                      width:64,height:64,borderRadius:12,flexShrink:0,padding:0,cursor:"pointer",overflow:"hidden",
+                      border:"1px solid rgba(192,132,252,0.3)"}}>
+                      <img src={pm.p} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Day sheet — memories (add/edit/delete) plus the quests done or started that day */}
+      {selectedDate&&(
         <MemoryDayModal
-          date={selected.date}
-          dayMemories={selected.memories||[]}
+          date={selectedDate}
+          dayMemories={selMemories}
+          completedQuests={index.done[selectedDate]||[]}
+          startedQuests={index.started[selectedDate]||[]}
+          onOpenQuest={(q)=>{ setSelectedDate(null); onEditQuest&&onEditQuest(q); }}
           userId={user.id}
           onSave={async(mem)=>{
             await sb.upsertMemory({...mem,user_id:user.id});
-            const updated = await sb.getMemories(user.id);
-            setMemories(updated);
-            // Keep modal open to allow adding more, just refresh
-            setSelected(s=>({...s,memories:updated.filter(m=>m.date===s.date)}));
+            setMemories(await sb.getMemories(user.id));
           }}
           onDelete={async(id)=>{
             await sb.deleteMemory(id);
-            const updated = await sb.getMemories(user.id);
-            setMemories(updated);
-            setSelected(s=>({...s,memories:updated.filter(m=>m.date===s.date)}));
+            setMemories(await sb.getMemories(user.id));
           }}
-          onClose={()=>setSelected(null)}
+          onClose={()=>setSelectedDate(null)}
         />
       )}
     </div>
@@ -5498,7 +5578,7 @@ function MemoriesPage({ user }) {
 }
 
 // ─── MEMORY DAY MODAL ─────────────────────────────────────────────────────────
-function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClose }) {
+function MemoryDayModal({ date, dayMemories=[], completedQuests=[], startedQuests=[], onOpenQuest, userId, onSave, onDelete, onClose }) {
   const [view, setView]     = useState("list");
   const [editing, setEditing] = useState(null);
   const [visible, setVisible] = useState(false);
@@ -5536,7 +5616,8 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
               {displayDate}
             </h2>
             <p style={{margin:"2px 0 0",fontSize:11,color:"rgba(192,132,252,0.6)",fontFamily:"'DM Sans',sans-serif"}}>
-              {dayMemories.length} moment{dayMemories.length!==1?"s":""}
+              {[completedQuests.length>0&&`${completedQuests.length} quest${completedQuests.length!==1?"s":""} done`,
+                `${dayMemories.length} moment${dayMemories.length!==1?"s":""}`].filter(Boolean).join(" · ")}
             </p>
           </div>
           <button onClick={close} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",
@@ -5547,6 +5628,34 @@ function MemoryDayModal({ date, dayMemories=[], userId, onSave, onDelete, onClos
 
         {view==="list"&&(
           <>
+            {(completedQuests.length>0||startedQuests.length>0)&&(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <p style={{margin:0,fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+                  color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>Quests</p>
+                {[...completedQuests.map(q=>({q,kind:"done"})),...startedQuests.map(q=>({q,kind:"started"}))].map(({q,kind})=>{
+                  const pal=getPalette(q.id,q.color_index);
+                  return(
+                    <button key={q.id+kind} onClick={()=>onOpenQuest&&onOpenQuest(q)} style={{
+                      display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:14,
+                      textAlign:"left",cursor:"pointer",background:"rgba(255,255,255,0.03)",
+                      border:`1px solid ${pal.color}28`,borderLeft:`3px solid ${pal.color}`}}>
+                      <span style={{fontSize:18,flexShrink:0}}>{q.emoji||(kind==="done"?"🔥":"⚔")}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13.5,fontWeight:700,color:"#F0F0F0",fontFamily:"'Cormorant Garamond',serif",
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.title}</div>
+                        <div style={{fontSize:10.5,color:kind==="done"?"#FBBF24":"#A8FF78",
+                          fontFamily:"'DM Sans',sans-serif",marginTop:1,fontWeight:600}}>
+                          {kind==="done"?"🔥 Completed":"⚔ Started"}
+                        </div>
+                      </div>
+                      {q.photo&&<img src={q.photo} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
+                    </button>
+                  );
+                })}
+                <p style={{margin:"6px 0 0",fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",
+                  color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif"}}>Moments</p>
+              </div>
+            )}
             {dayMemories.length===0&&(
               <div style={{textAlign:"center",padding:"20px 0",color:"rgba(255,255,255,0.2)",
                 fontSize:14,fontFamily:"'DM Sans',sans-serif"}}>No moments yet. Add your first!</div>
@@ -6207,204 +6316,6 @@ function QuestMapPage({ quests }) {
 }
 
 
-// ─── QUEST IDEA GENERATOR ─────────────────────────────────────────────────────
-function QuestIdeaGenerator({ onAddQuest, onClose }) {
-  const [ideas, setIdeas]       = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [visible, setVisible]   = useState(false);
-  const [added, setAdded]       = useState({});
-
-  useEffect(()=>{ requestAnimationFrame(()=>setVisible(true)); generateIdeas(); },[]);
-  const close=()=>{ setVisible(false); setTimeout(onClose,250); };
-
-  const generateIdeas = async() => {
-    setLoading(true);
-    try {
-      // Use random seed to ensure different results every time
-      const seeds = [
-        "public stunts and pranks",
-        "food and eating challenges", 
-        "Baku city exploration",
-        "brother challenges",
-        "night missions",
-        "disguise and costume missions",
-        "social experiments",
-        "sports and physical challenges",
-        "creative and artistic",
-        "unhinged solo missions"
-      ];
-      const seed = seeds[Math.floor(Math.random()*seeds.length)];
-      const randomNum = Math.floor(Math.random()*1000);
-
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-6",
-          max_tokens:1000,
-          messages:[{
-            role:"user",
-            content:`Generate 8 completely unique side quest ideas. Seed: ${seed} #${randomNum}
-
-These are real life adventures. The person lives in Baku Azerbaijan and has a brother.
-
-EXACT VIBE — match these existing quests exactly:
-- "Trashbagging over Grass" (slide on grass in trash bags)
-- "Cooking with Grabbers" (cook a full meal using grabber tools)  
-- "Wear Inflatable Dino Costumes" (go places in dinosaur costumes)
-- "Convince a Restaurant to Let You Cook One Dish on Their Menu"
-- "Hot Wine Night" (make hot wine from scratch)
-- "Giant Sand Castle" (build massive sandcastle)
-- "Drunk Bowling"
-- "Wig Snatching Party"
-
-Rules:
-- Short punchy titles (2-5 words max usually)
-- Specific and weird, not generic
-- Actually doable in real life
-- Funny or Instagram-worthy
-- Mix of solo, with brother, with crew
-- Some Baku-specific, some universal
-- Think: what would make a great story to tell later
-- Category: ${seed}
-- Every generation must be COMPLETELY DIFFERENT from before
-
-Return ONLY a JSON array of 8 objects, no markdown, no backticks, no explanation:
-[{"title":"Quest Title","description":"One punchy sentence","emoji":"🎯"}]`
-          }]
-        })
-      });
-      const d = await r.json();
-      const text = d.content?.[0]?.text||"[]";
-      const clean = text.replace(/\`\`\`json|\`\`\`/g,"").trim();
-      const parsed = JSON.parse(clean);
-      setIdeas(parsed);
-    } catch(e) {
-      console.error(e);
-      setIdeas([
-        {title:"Wear a Suit to the Bazaar",description:"Buy groceries in full formal attire",emoji:"🤵"},
-        {title:"Midnight Food Crawl",description:"Hit every 24hr spot in Baku in one night",emoji:"🌙"},
-        {title:"Convince a Stranger to Join Your Quest",description:"Recruit someone random off the street",emoji:"🤝"},
-        {title:"Cook Blindfolded",description:"Full meal, eyes closed, kitchen chaos",emoji:"👨‍🍳"},
-        {title:"Go Karting in Costume",description:"Race in whatever ridiculous outfit you own",emoji:"🏎"},
-        {title:"Find the Best Cheesecake",description:"Full bracket tournament across Baku",emoji:"🍰"},
-        {title:"Rooftop Barbecue",description:"Find a rooftop and grill something",emoji:"🔥"},
-        {title:"Speak Only in Questions",description:"Full day, every sentence is a question",emoji:"❓"},
-      ]);
-    }
-    setLoading(false);
-  };
-
-  const addIdea = (idea) => {
-    onAddQuest({title:idea.title, description:idea.description, emoji:idea.emoji});
-    setAdded(a=>({...a,[idea.title]:true}));
-  };
-
-  return createPortal(
-    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${visible?0.8:0})`,
-      backdropFilter:`blur(${visible?20:0}px)`,display:"flex",alignItems:"flex-end",
-      justifyContent:"center",zIndex:9999,transition:"all 0.25s"}}
-      onClick={e=>e.target===e.currentTarget&&close()}>
-      <div style={{background:"linear-gradient(160deg,#111114,#0C0C0F)",
-        borderRadius:"24px 24px 0 0",border:"1px solid rgba(255,255,255,0.09)",borderBottom:"none",
-        width:"100%",maxWidth:560,padding:"12px 20px 52px",
-        display:"flex",flexDirection:"column",gap:0,
-        transform:visible?"translateY(0)":"translateY(100%)",
-        transition:"transform 0.3s cubic-bezier(0.34,1.1,0.64,1)",
-        maxHeight:"88vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-
-        <div style={{width:40,height:4,borderRadius:2,background:"rgba(255,255,255,0.1)",
-          margin:"8px auto 16px",flexShrink:0}}/>
-
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexShrink:0}}>
-          <div>
-            <h2 style={{margin:0,fontSize:20,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",color:"#F2F2F2"}}>
-              Quest Ideas ✨
-            </h2>
-            <p style={{margin:"3px 0 0",fontSize:12,color:"rgba(255,255,255,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
-              Tap + to add to your quests
-            </p>
-          </div>
-          <button onClick={close} style={{background:"rgba(255,255,255,0.06)",
-            border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,
-            padding:"7px 8px",cursor:"pointer",color:"rgba(255,255,255,0.4)"}}>
-            <Icon d={Icons.x} size={16}/>
-          </button>
-        </div>
-
-        {loading?(
-          <div style={{display:"flex",flexDirection:"column",gap:10,padding:"10px 0"}}>
-            {[...Array(6)].map((_,i)=>(
-              <div key={i} style={{height:72,borderRadius:16,
-                background:"rgba(255,255,255,0.04)",
-                animation:"pulse 1.5s ease-in-out infinite",
-                animationDelay:`${i*0.1}s`}}/>
-            ))}
-            <style>{`@keyframes pulse{0%,100%{opacity:0.4}50%{opacity:0.8}}`}</style>
-          </div>
-        ):(
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {ideas.map((idea,i)=>{
-              const isAdded = added[idea.title];
-              const colors = ["#A8FF78","#78C1FF","#C084FC","#FBBF24","#F472B6","#34D399","#FB923C","#E879F9"];
-              const color = colors[i%colors.length];
-              return(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:12,
-                  padding:"14px 14px",borderRadius:16,
-                  background:isAdded?`${color}08`:"rgba(255,255,255,0.03)",
-                  border:`1px solid ${isAdded?color+"30":"rgba(255,255,255,0.07)"}`,
-                  transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)",
-                  animation:`cardIn 0.4s ease ${i*0.06}s both`}}>
-                  <div style={{width:42,height:42,borderRadius:12,flexShrink:0,
-                    background:`${color}12`,border:`1px solid ${color}25`,
-                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
-                    {idea.emoji||"⚔"}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:"#F2F2F2",
-                      fontFamily:"'Cormorant Garamond',serif",lineHeight:1.3,
-                      wordBreak:"break-word"}}>{idea.title}</div>
-                    {idea.description&&<div style={{fontSize:11.5,color:"rgba(255,255,255,0.35)",
-                      fontFamily:"'DM Sans',sans-serif",marginTop:2,lineHeight:1.4}}>
-                      {idea.description}
-                    </div>}
-                  </div>
-                  <button onClick={()=>!isAdded&&addIdea(idea)} style={{
-                    width:34,height:34,borderRadius:10,border:"none",cursor:isAdded?"default":"pointer",
-                    background:isAdded?`${color}20`:"rgba(255,255,255,0.08)",
-                    color:isAdded?color:"rgba(255,255,255,0.5)",
-                    display:"flex",alignItems:"center",justifyContent:"center",
-                    flexShrink:0,fontSize:18,fontWeight:700,transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}>
-                    {isAdded?"✓":"+"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Generate more button */}
-        {!loading&&(
-          <button onClick={generateIdeas} style={{
-            marginTop:14,padding:"15px",borderRadius:16,border:"1px solid rgba(255,255,255,0.1)",
-            cursor:"pointer",
-            background:"linear-gradient(135deg,rgba(168,255,120,0.12),rgba(120,193,255,0.12))",
-            color:"rgba(255,255,255,0.9)",fontSize:14,fontWeight:700,
-            fontFamily:"'DM Sans',sans-serif",flexShrink:0,
-            display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-            transition:"all 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}
-            onMouseEnter={e=>e.currentTarget.style.background="linear-gradient(135deg,rgba(168,255,120,0.2),rgba(120,193,255,0.2))"}
-            onMouseLeave={e=>e.currentTarget.style.background="linear-gradient(135deg,rgba(168,255,120,0.12),rgba(120,193,255,0.12))"}>
-            ✨ Generate 8 New Ideas
-          </button>
-        )}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-
 // ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
 // A normal (non-fixed) flex item pinned to the bottom of the fixed-height app
 // shell — it is physically impossible for this to "detach" while scrolling,
@@ -6559,14 +6470,12 @@ const TUTORIAL_SECTIONS = [
     text:"Add friends by email. Tap a friend to see their public quests, rank, and movie log. Check the Leaderboard tab to see who has the most XP or completed quests."},
   {icon:"🎬", color:MOVIE_ACCENT, title:"Movies & Shows",
     text:"Log everything you watch — search pulls real posters automatically. Rate it, write your thoughts, and track TV shows season by season instead of one big blob."},
-  {icon:"📸", color:"#C084FC", title:"Memories",
-    text:"A private day-by-day photo journal. Tap any date on the calendar to log what happened — you can add more than one moment per day."},
+  {icon:"📸", color:"#C084FC", title:"Journal",
+    text:"Your streaks, a calendar of everything you did, and a private photo journal in one place. Tap any date to see the quests you finished and log moments, then flip the recap between week, month and year."},
   {icon:"🌍", color:"#2DD4BF", title:"Quest Map",
     text:"Every quest with a location gets pinned on one map, so you can see everywhere your quests have taken you."},
   {icon:"👤", color:"#F0F0F0", title:"Profile",
     text:"Set your name, upload a real photo instead of your emoji avatar, and track your rank and XP progress ring."},
-  {icon:"✨", color:"#FBBF24", title:"Stuck for ideas?",
-    text:"Tap the sparkle button on the Quests tab any time for fresh, AI-generated quest suggestions."},
 ];
 
 function TutorialModal({ onClose }) {
@@ -6851,7 +6760,6 @@ export default function App(){
   const [deleteTarget,setDeleteTarget] = useState(null);
   const [memberDetail,setMemberDetail] = useState(null);
   const [shareQuest,setShareQuest]       = useState(null);
-  const [showIdeas,setShowIdeas]         = useState(false);
   const [mounted,setMounted]     = useState(false);
   const [showTutorial,setShowTutorial] = useState(false);
   const [syncing,setSyncing]     = useState(false);
@@ -7093,10 +7001,9 @@ export default function App(){
     {id:"friends",  label:"Friends",  icon:Icons.users,  count:friendRequestCount},
     {id:"activity", label:"Activity", icon:Icons.bell,   count:0},
     {id:"completed",label:"Done",     icon:Icons.check,  count:completedCount},
-    {id:"memories", label:"Memories", icon:Icons.camera, count:0},
+    {id:"journal",  label:"Journal",  icon:Icons.cal,    count:0},
     {id:"movies",   label:"Movies",   icon:Icons.film,   count:0},
     {id:"map",      label:"Map",      icon:Icons.globe,  count:quests.filter(q=>q.location?.name).length},
-    {id:"calendar", label:"Calendar", icon:Icons.cal,    count:0},
     {id:"profile",  label:"Profile",  icon:Icons.user,   count:0},
   ];
 
@@ -7483,8 +7390,8 @@ export default function App(){
           <ActivityFeedPage user={user} friends={friends}/>
         )}
 
-        {tab==="memories"&&(
-          <MemoriesPage user={user}/>
+        {tab==="journal"&&(
+          <JournalPage user={user} quests={quests} onEditQuest={q=>setQuestModal(q)}/>
         )}
 
         {tab==="movies"&&(
@@ -7522,41 +7429,6 @@ export default function App(){
           </div>
         )}
 
-        {tab==="calendar"&&(
-          <div style={{maxWidth:560,margin:"20px auto 0",padding:"0 24px"}}>
-            <div style={{marginBottom:16}}>
-              <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",marginBottom:4}}>Your Journey</p>
-              <h2 style={{fontSize:24,fontWeight:700,fontFamily:"'Cormorant Garamond',serif",background:"linear-gradient(135deg,#F2F2F2,rgba(242,242,242,0.5))",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Streak Calendar</h2>
-            </div>
-            <StreakCalendar quests={quests}/>
-            {quests.filter(q=>q.status==="Completed"&&q.completed_at).length>0&&(
-              <div>
-                <p style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:"rgba(255,255,255,0.25)",fontFamily:"'DM Sans',sans-serif",marginBottom:12}}>Completed Timeline</p>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {quests.filter(q=>q.status==="Completed"&&q.completed_at)
-                    .sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))
-                    .map((q,i)=>{
-                      const p=getPalette(q.id, q.color_index);
-                      return(
-                        <div key={q.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:14,background:"rgba(255,255,255,0.025)",border:`1px solid ${p.color}20`,animation:`cardIn 0.4s ease ${i*0.05}s both`}}>
-                          <div style={{fontSize:24}}>🔥</div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:14,fontWeight:700,color:"#F0F0F0",fontFamily:"'Cormorant Garamond',serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                              {q.emoji&&<span style={{marginRight:6}}>{q.emoji}</span>}{q.title}
-                            </div>
-                            <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'DM Sans',sans-serif",marginTop:2}}>
-                              {new Date(q.completed_at).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}
-                            </div>
-                          </div>
-                          {q.photo&&<img src={q.photo} alt="" style={{width:40,height:40,borderRadius:8,objectFit:"cover",border:`1px solid ${p.color}30`,flexShrink:0}}/>}
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
         </div>
       </main>
       </div>
@@ -7566,19 +7438,6 @@ export default function App(){
       {["quests","boards"].includes(tab)&&!activeBoard&&(
         <div style={{position:"absolute",right:16,bottom:88,zIndex:60,
           display:"flex",flexDirection:"column",alignItems:"flex-end",gap:10}}>
-          {tab==="quests"&&(
-            <button onClick={()=>setShowIdeas(true)} style={{
-              width:46,height:46,borderRadius:15,
-              border:"1px solid rgba(255,255,255,0.1)",cursor:"pointer",
-              background:"rgba(14,14,18,0.92)",backdropFilter:"blur(12px)",
-              boxShadow:"0 4px 20px rgba(0,0,0,0.5)",
-              display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:20,transition:"transform 0.2s cubic-bezier(0.34,1.2,0.64,1)"}}
-              onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
-              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-              ✨
-            </button>
-          )}
           <button onClick={()=>{
             if(tab==="quests") setQuestModal({...EMPTY_QUEST});
             else if(tab==="boards") setShowCreateBoard(true);
@@ -7604,13 +7463,6 @@ export default function App(){
 
       {questModal&&<QuestModal quest={questModal} onSave={saveQuest} friends={friends} onClose={()=>setQuestModal(null)}/>}
       {shareQuest&&<ShareQuestCard quest={shareQuest} user={user} onClose={()=>setShareQuest(null)}/>}
-      {showIdeas&&<QuestIdeaGenerator
-        onAddQuest={(idea)=>{
-          setQuestModal({...EMPTY_QUEST,...idea});
-          setShowIdeas(false);
-        }}
-        onClose={()=>setShowIdeas(false)}
-      />}
       {showTutorial&&<TutorialModal onClose={()=>setShowTutorial(false)}/>}
       {showCreateBoard&&<CreateBoardModal onSave={createBoard} onClose={()=>setShowCreateBoard(false)}/>}
       {inviteBoard&&<InviteModal board={inviteBoard} user={user} friends={friends} onClose={()=>setInviteBoard(null)}/>}
