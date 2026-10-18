@@ -5171,15 +5171,36 @@ function JournalPage({ user, quests, onEditQuest, onShareQuest }) {
   const todayKey = dayKey(today);
 
   useEffect(()=>{
+    // Photos are big, so loading every row with its photos at once times out the database.
+    // Load the light fields first (instant), then fetch each memory's photos one by one.
+    let dead=false;
     (async()=>{
       try{
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${user.id}&select=*`, {headers:sb.h});
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${user.id}&select=id,user_id,date,title,note,emoji,created_at&order=date.desc`, {headers:sb.h});
         const d = await r.json();
         if(!r.ok){ setMemStatus(`Error ${r.status}: ${d?.message||d?.hint||"could not load"}`); return; }
-        setMemories(Array.isArray(d)?d:[]);
-        setMemStatus(`ok:${Array.isArray(d)?d.length:0}`);
+        const rows = Array.isArray(d)?d:[];
+        if(dead) return;
+        setMemories(rows.map(m=>({...m,_pl:false})));
+        setMemStatus(`ok:${rows.length}`);
+        const ids = rows.map(m=>m.id);
+        let next=0;
+        const worker = async()=>{
+          while(!dead && next<ids.length){
+            const id = ids[next++];
+            try{
+              const pr = await fetch(`${SUPABASE_URL}/rest/v1/memories?id=eq.${id}&select=id,photo,photos`, {headers:sb.h});
+              if(!pr.ok) continue;
+              const pd = await pr.json();
+              const row = Array.isArray(pd)?pd[0]:null;
+              if(row && !dead) setMemories(prev=>prev.map(m=>m.id===id?{...m,photo:row.photo,photos:row.photos,_pl:true}:m));
+            }catch(e){}
+          }
+        };
+        await Promise.all([worker(),worker(),worker()]);
       }catch(e){ setMemStatus("Error: "+(e?.message||"network")); }
     })();
+    return ()=>{ dead=true; };
   },[]);
 
   // Everything indexed by local calendar day
@@ -5625,12 +5646,20 @@ function JournalPage({ user, quests, onEditQuest, onShareQuest }) {
           onShareQuest={(q)=>{ setSelectedDate(null); onShareQuest&&onShareQuest(q); }}
           userId={user.id}
           onSave={async(mem)=>{
-            await sb.upsertMemory({...mem,user_id:user.id});
-            setMemories(await sb.getMemories(user.id));
+            const existing = memories.find(m=>m.id===mem.id);
+            const body = {...mem,user_id:user.id};
+            // if this memory's photos haven't finished loading, don't overwrite them
+            if(existing && existing._pl===false){ delete body.photo; delete body.photos; }
+            await sb.upsertMemory(body);
+            setMemories(prev=>{
+              const merged = {...(existing||{}),...body,_pl:existing?existing._pl:true};
+              if(existing&&existing._pl===false){ merged.photo=existing.photo; merged.photos=existing.photos; }
+              return existing ? prev.map(m=>m.id===mem.id?merged:m) : [merged,...prev];
+            });
           }}
           onDelete={async(id)=>{
             await sb.deleteMemory(id);
-            setMemories(await sb.getMemories(user.id));
+            setMemories(prev=>prev.filter(m=>m.id!==id));
           }}
           onClose={()=>setSelectedDate(null)}
         />
